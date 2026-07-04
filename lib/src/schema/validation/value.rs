@@ -1,4 +1,3 @@
-/// A runtime data instance to be checked against a [`super::Schema`].
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
 	Bool(bool),

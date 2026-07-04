@@ -3,6 +3,12 @@ name = "lib"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+# Executes endpoint definitions (Access dispatch, Binding::Wasm, etc). Kept
+# separate from the default build so consumers who only need Schema/Endpoint
+# definitions aren't forced to pull in the runtime's dependencies.
+engine = []
+
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
 http = "1.4.2"
