@@ -1,0 +1,15 @@
+# Rust build artifacts
+target/
+
+# The lib crate is a library — consumers resolve their own dependency graph,
+# so its lockfile shouldn't be committed. The cli crate is a binary, so its
+# Cargo.lock stays tracked.
+/lib/Cargo.lock
+
+# Editor swap/backup files
+*.swp
+*.swo
+*~
+
+# OS cruft
+.DS_Store

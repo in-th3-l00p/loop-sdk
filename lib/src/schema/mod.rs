@@ -1,6 +1,8 @@
+mod serialization;
+
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Primitive {
 	Bool,
 	I32,
@@ -14,7 +16,7 @@ pub enum Primitive {
 	Blob
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Schema {
 	Primitive(Primitive),
 	List(Box<Schema>),
