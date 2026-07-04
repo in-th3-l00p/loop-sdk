@@ -1,4 +1,7 @@
 mod serialization;
+mod validation;
+
+pub use validation::{ValidationError, Value};
 
 use serde::{Deserialize, Serialize};
 
