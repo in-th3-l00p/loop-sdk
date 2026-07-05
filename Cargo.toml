@@ -1,0 +1,17 @@
+[workspace]
+members = ["cli", "lib"]
+resolver = "3"
+
+# cranelift is unusably slow at compiling wasm modules when built without
+# optimizations, so keep the wasm codegen path optimized even in dev builds
+[profile.dev.package.cranelift-codegen]
+opt-level = 3
+
+[profile.dev.package.regalloc2]
+opt-level = 3
+
+[profile.dev.package.wasmparser]
+opt-level = 3
+
+[profile.dev.package.wasmtime]
+opt-level = 3

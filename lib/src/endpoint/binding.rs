@@ -18,8 +18,24 @@ where
 	}
 }
 
+pub type ValueStream = Box<dyn Iterator<Item = Result<Value, HandlerError>> + Send>;
+
+pub trait Source: Send + Sync {
+	fn subscribe(&self, args: &[Value]) -> Result<ValueStream, HandlerError>;
+}
+
+impl<F> Source for F
+where
+	F: Fn(&[Value]) -> Result<ValueStream, HandlerError> + Send + Sync
+{
+	fn subscribe(&self, args: &[Value]) -> Result<ValueStream, HandlerError> {
+		self(args)
+	}
+}
+
 pub enum Binding {
 	Native(Arc<dyn Handler>),
+	Stream(Arc<dyn Source>),
 	Wasm { bytes: Vec<u8>, export: String }
 }
 
@@ -47,6 +63,18 @@ mod tests {
 
 		let Binding::Native(handler) = &binding else { unreachable!() };
 		assert!(handler.call(&[]).is_err());
+	}
+
+	#[test]
+	fn stream_binding_yields_values_through_source_trait_object() {
+		let binding = Binding::Stream(Arc::new(|_: &[Value]| -> Result<ValueStream, HandlerError> {
+			Ok(Box::new((0..3).map(|i| Ok(Value::I64(i)))))
+		}));
+
+		let Binding::Stream(source) = &binding else { unreachable!() };
+		let items: Vec<_> = source.subscribe(&[]).unwrap().map(Result::unwrap).collect();
+
+		assert_eq!(items, vec![Value::I64(0), Value::I64(1), Value::I64(2)]);
 	}
 
 	#[test]

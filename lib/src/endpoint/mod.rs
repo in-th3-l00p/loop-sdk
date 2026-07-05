@@ -2,7 +2,7 @@ mod binding;
 #[cfg(feature = "engine")]
 pub mod engine;
 
-pub use binding::{Binding, Handler, HandlerError};
+pub use binding::{Binding, Handler, HandlerError, Source, ValueStream};
 
 use http::Method;
 use serde::{Deserialize, Serialize};

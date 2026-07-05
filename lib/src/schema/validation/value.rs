@@ -1,4 +1,6 @@
-#[derive(Debug, Clone, PartialEq)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
 	Bool(bool),
 	I32(i32),
@@ -15,7 +17,7 @@ pub enum Value {
 }
 
 impl Value {
-	pub(crate) fn kind(&self) -> &'static str {
+	pub fn kind(&self) -> &'static str {
 		match self {
 			Value::Bool(_) => "bool",
 			Value::I32(_) => "i32",
@@ -30,5 +32,23 @@ impl Value {
 			Value::List(_) => "list",
 			Value::Map(_) => "map"
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn bson_roundtrips_nested_value() {
+		let value = Value::Map(vec![(
+			Value::Str("xs".into()),
+			Value::List(vec![Value::I64(1), Value::Blob(vec![0xde, 0xad])])
+		)]);
+
+		let bytes = bson::serialize_to_vec(&value).unwrap();
+		let back: Value = bson::deserialize_from_slice(&bytes).unwrap();
+
+		assert_eq!(value, back);
 	}
 }

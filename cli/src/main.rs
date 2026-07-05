@@ -9,6 +9,6 @@ fn main() {
 
 	match args.command {
 		Commands::Init => commands::init::run(),
-		Commands::Dev => commands::dev::run(),
+		Commands::Dev { port, dir } => commands::dev::run(&dir, port),
 	}
 }

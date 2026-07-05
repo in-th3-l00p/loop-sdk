@@ -12,8 +12,13 @@ pub struct Args {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Initialize the app
+    /// Scaffold a new loop project in the current directory
     Init,
-    /// Run the app in development mode
-    Dev,
+    /// Serve the loop project with the dev server
+    Dev {
+        #[arg(long, default_value_t = 3000)]
+        port: u16,
+        #[arg(long, default_value = ".")]
+        dir: String,
+    },
 }
