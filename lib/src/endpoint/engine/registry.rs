@@ -83,11 +83,7 @@ pub fn prepare(endpoints: Vec<Endpoint>) -> Result<Vec<Arc<RegisteredEndpoint>>,
     let mut prepared = Vec::with_capacity(endpoints.len());
 
     for endpoint in endpoints {
-        // Sse and Live both mount as GET routes, so they share the GET slot
-        let (method, url) = match &endpoint.access {
-            Access::Rest { method, url } => (method.to_string(), url.clone()),
-            Access::Live { url } | Access::Sse { url } => ("GET".to_string(), url.clone()),
-        };
+        let (method, url) = route_key(&endpoint.access);
         if !routes.insert((method.clone(), url.clone())) {
             return Err(EngineError::Conflict(format!(
                 "endpoint {:?} duplicates route {method} {url}",
@@ -95,31 +91,7 @@ pub fn prepare(endpoints: Vec<Endpoint>) -> Result<Vec<Arc<RegisteredEndpoint>>,
             )));
         }
 
-        let streaming_access = matches!(endpoint.access, Access::Live { .. } | Access::Sse { .. });
-        let executor = match endpoint.binding {
-            Binding::Native(handler) => Executor::Native(handler),
-            Binding::Stream(source) => {
-                if !streaming_access {
-                    return Err(EngineError::Conflict(format!(
-                        "endpoint {:?} has a streaming binding but non-streaming access",
-                        endpoint.name
-                    )));
-                }
-                Executor::Stream(source)
-            }
-            Binding::Wasm { bytes, export } => {
-                if streaming_access {
-                    return Err(EngineError::Conflict(format!(
-                        "endpoint {:?}: wasm bindings do not support streaming access yet",
-                        endpoint.name
-                    )));
-                }
-                Executor::Wasm(Arc::new(
-                    WasmHandler::new(&bytes, &export).map_err(EngineError::Wasm)?,
-                ))
-            }
-        };
-
+        let executor = executor(&endpoint.name, &endpoint.access, endpoint.binding)?;
         prepared.push(Arc::new(RegisteredEndpoint {
             name: endpoint.name,
             signature: endpoint.signature,
@@ -129,6 +101,39 @@ pub fn prepare(endpoints: Vec<Endpoint>) -> Result<Vec<Arc<RegisteredEndpoint>>,
     }
 
     Ok(prepared)
+}
+
+// Sse and Live both mount as GET routes, so they share the GET slot
+fn route_key(access: &Access) -> (String, String) {
+    match access {
+        Access::Rest { method, url } => (method.to_string(), url.clone()),
+        Access::Live { url } | Access::Sse { url } => ("GET".to_string(), url.clone()),
+    }
+}
+
+fn executor(name: &str, access: &Access, binding: Binding) -> Result<Executor, EngineError> {
+    let streaming_access = matches!(access, Access::Live { .. } | Access::Sse { .. });
+
+    match binding {
+        Binding::Native(handler) => Ok(Executor::Native(handler)),
+        Binding::Stream(source) => {
+            if !streaming_access {
+                return Err(EngineError::Conflict(format!(
+                    "endpoint {name:?} has a streaming binding but non-streaming access"
+                )));
+            }
+            Ok(Executor::Stream(source))
+        }
+        Binding::Wasm { bytes, export } => {
+            if streaming_access {
+                return Err(EngineError::Conflict(format!(
+                    "endpoint {name:?}: wasm bindings do not support streaming access yet"
+                )));
+            }
+            let handler = WasmHandler::new(&bytes, &export).map_err(EngineError::Wasm)?;
+            Ok(Executor::Wasm(Arc::new(handler)))
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
-mod json;
-mod live;
-mod request;
-mod rest;
-mod sse;
+/* shared HTTP/SSE/WebSocket serving layer on top of the engine, used by the
+CLI dev server and by compiled standalone binaries */
+
+mod protocol;
+mod wire;
 
 use axum::Json;
 use axum::http::StatusCode;
@@ -12,15 +12,11 @@ use crate::endpoint::Access;
 use crate::endpoint::engine::{Engine, EngineError};
 
 pub fn router(engine: &Engine) -> axum::Router {
-    let mut router = axum::Router::new();
-    for endpoint in engine.endpoints() {
-        router = match &endpoint.access {
-            Access::Rest { .. } => rest::mount(router, endpoint.clone()),
-            Access::Sse { .. } => sse::mount(router, endpoint.clone()),
-            Access::Live { .. } => live::mount(router, endpoint.clone()),
-        };
-    }
-    router
+    engine
+        .endpoints()
+        .fold(axum::Router::new(), |router, endpoint| {
+            protocol::mount(router, endpoint.clone())
+        })
 }
 
 pub fn routes(engine: &Engine) -> Vec<String> {

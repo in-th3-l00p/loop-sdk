@@ -7,10 +7,10 @@ use axum::extract::{Path, Query};
 use axum::response::Response;
 use axum::routing::get;
 
-use super::{json, request};
 use crate::endpoint::Access;
 use crate::endpoint::engine::{EngineError, RegisteredEndpoint};
 use crate::schema::Value;
+use crate::server::wire::{json, request};
 
 pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
     let Access::Live { url } = &endpoint.access else {

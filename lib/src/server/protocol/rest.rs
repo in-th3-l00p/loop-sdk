@@ -6,9 +6,9 @@ use axum::routing::{MethodFilter, on};
 use axum::{Json, Router};
 use serde_json::Value as JsonValue;
 
-use super::{json, request};
 use crate::endpoint::Access;
 use crate::endpoint::engine::{EngineError, RegisteredEndpoint};
+use crate::server::wire::{json, request};
 
 pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
     let Access::Rest { method, url } = &endpoint.access else {

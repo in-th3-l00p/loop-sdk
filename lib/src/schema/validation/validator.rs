@@ -29,7 +29,7 @@ fn validate_primitive(primitive: &Primitive, value: &Value) -> Result<(), Valida
         Ok(())
     } else {
         Err(ValidationError::TypeMismatch {
-            expected: primitive_kind(primitive),
+            expected: primitive.kind(),
             found: value.kind(),
         })
     }
@@ -77,21 +77,6 @@ fn validate_map(
     }
 
     Ok(())
-}
-
-fn primitive_kind(primitive: &Primitive) -> &'static str {
-    match primitive {
-        Primitive::Bool => "bool",
-        Primitive::I32 => "i32",
-        Primitive::U32 => "u32",
-        Primitive::I64 => "i64",
-        Primitive::U64 => "u64",
-        Primitive::F32 => "f32",
-        Primitive::F64 => "f64",
-        Primitive::Str => "str",
-        Primitive::Date => "date",
-        Primitive::Blob => "blob",
-    }
 }
 
 #[cfg(test)]

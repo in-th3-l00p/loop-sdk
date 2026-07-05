@@ -23,53 +23,38 @@ pub fn decode(schema: &Schema, json: &Json) -> Result<Value, String> {
 }
 
 fn decode_primitive(primitive: &Primitive, json: &Json) -> Result<Value, String> {
-    match primitive {
-        Primitive::Bool => json
-            .as_bool()
-            .map(Value::Bool)
-            .ok_or_else(|| mismatch("bool", json)),
+    if let Primitive::Blob = primitive {
+        return decode_blob(json);
+    }
+
+    let decoded = match primitive {
+        Primitive::Bool => json.as_bool().map(Value::Bool),
         Primitive::I32 => json
             .as_i64()
             .and_then(|n| i32::try_from(n).ok())
-            .map(Value::I32)
-            .ok_or_else(|| mismatch("i32", json)),
+            .map(Value::I32),
         Primitive::U32 => json
             .as_u64()
             .and_then(|n| u32::try_from(n).ok())
-            .map(Value::U32)
-            .ok_or_else(|| mismatch("u32", json)),
-        Primitive::I64 => json
-            .as_i64()
-            .map(Value::I64)
-            .ok_or_else(|| mismatch("i64", json)),
-        Primitive::U64 => json
-            .as_u64()
-            .map(Value::U64)
-            .ok_or_else(|| mismatch("u64", json)),
-        Primitive::F32 => json
-            .as_f64()
-            .map(|n| Value::F32(n as f32))
-            .ok_or_else(|| mismatch("f32", json)),
-        Primitive::F64 => json
-            .as_f64()
-            .map(Value::F64)
-            .ok_or_else(|| mismatch("f64", json)),
-        Primitive::Str => json
-            .as_str()
-            .map(|s| Value::Str(s.into()))
-            .ok_or_else(|| mismatch("str", json)),
-        Primitive::Date => json
-            .as_str()
-            .map(|s| Value::Date(s.into()))
-            .ok_or_else(|| mismatch("date", json)),
-        Primitive::Blob => {
-            let s = json.as_str().ok_or_else(|| mismatch("base64 blob", json))?;
-            BASE64
-                .decode(s)
-                .map(Value::Blob)
-                .map_err(|e| format!("invalid base64 blob: {e}"))
-        }
-    }
+            .map(Value::U32),
+        Primitive::I64 => json.as_i64().map(Value::I64),
+        Primitive::U64 => json.as_u64().map(Value::U64),
+        Primitive::F32 => json.as_f64().map(|n| Value::F32(n as f32)),
+        Primitive::F64 => json.as_f64().map(Value::F64),
+        Primitive::Str => json.as_str().map(|s| Value::Str(s.into())),
+        Primitive::Date => json.as_str().map(|s| Value::Date(s.into())),
+        Primitive::Blob => unreachable!(),
+    };
+
+    decoded.ok_or_else(|| mismatch(primitive.kind(), json))
+}
+
+fn decode_blob(json: &Json) -> Result<Value, String> {
+    let encoded = json.as_str().ok_or_else(|| mismatch("base64 blob", json))?;
+    BASE64
+        .decode(encoded)
+        .map(Value::Blob)
+        .map_err(|e| format!("invalid base64 blob: {e}"))
 }
 
 fn decode_map(key: &Schema, value: &Schema, json: &Json) -> Result<Value, String> {

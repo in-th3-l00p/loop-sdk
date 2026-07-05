@@ -48,21 +48,20 @@ fn decode_scalar(name: &str, schema: &Schema, raw: &str) -> Result<Value, Engine
         ));
     };
 
-    match primitive {
-        Primitive::Bool => raw.parse().map(Value::Bool).map_err(|_| error("bool")),
-        Primitive::I32 => raw.parse().map(Value::I32).map_err(|_| error("i32")),
-        Primitive::U32 => raw.parse().map(Value::U32).map_err(|_| error("u32")),
-        Primitive::I64 => raw.parse().map(Value::I64).map_err(|_| error("i64")),
-        Primitive::U64 => raw.parse().map(Value::U64).map_err(|_| error("u64")),
-        Primitive::F32 => raw.parse().map(Value::F32).map_err(|_| error("f32")),
-        Primitive::F64 => raw.parse().map(Value::F64).map_err(|_| error("f64")),
-        Primitive::Str => Ok(Value::Str(raw.into())),
-        Primitive::Date => Ok(Value::Date(raw.into())),
-        Primitive::Blob => BASE64
-            .decode(raw)
-            .map(Value::Blob)
-            .map_err(|_| error("base64 blob")),
-    }
+    let parsed = match primitive {
+        Primitive::Bool => raw.parse().ok().map(Value::Bool),
+        Primitive::I32 => raw.parse().ok().map(Value::I32),
+        Primitive::U32 => raw.parse().ok().map(Value::U32),
+        Primitive::I64 => raw.parse().ok().map(Value::I64),
+        Primitive::U64 => raw.parse().ok().map(Value::U64),
+        Primitive::F32 => raw.parse().ok().map(Value::F32),
+        Primitive::F64 => raw.parse().ok().map(Value::F64),
+        Primitive::Str => Some(Value::Str(raw.into())),
+        Primitive::Date => Some(Value::Date(raw.into())),
+        Primitive::Blob => BASE64.decode(raw).ok().map(Value::Blob),
+    };
+
+    parsed.ok_or_else(|| error(primitive.kind()))
 }
 
 #[cfg(test)]

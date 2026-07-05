@@ -24,6 +24,12 @@ fn store(engine: &wasmtime::Engine) -> Store<WasiP1Ctx> {
     )
 }
 
+// guest exports return their result buffer as one i64: pointer in the high
+// 32 bits, length in the low 32 bits
+fn unpack_ptr_len(packed: i64) -> (usize, usize) {
+    ((packed >> 32) as u32 as usize, packed as u32 as usize)
+}
+
 // wasip1 reactor modules expose their initializers through `_initialize`
 fn instantiate(
     pre: &InstancePre<WasiP1Ctx>,
@@ -96,8 +102,7 @@ impl WasmHandler {
         memory.write(&mut store, ptr as usize, &input)?;
 
         let packed = call.call(&mut store, (ptr, len))?;
-        let out_ptr = (packed >> 32) as u32 as usize;
-        let out_len = packed as u32 as usize;
+        let (out_ptr, out_len) = unpack_ptr_len(packed);
 
         let mut output = vec![0u8; out_len];
         memory.read(&store, out_ptr, &mut output)?;

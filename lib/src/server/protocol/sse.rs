@@ -10,9 +10,9 @@ use axum::routing::get;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 
-use super::{json, request};
 use crate::endpoint::Access;
 use crate::endpoint::engine::{EngineError, RegisteredEndpoint};
+use crate::server::wire::{json, request};
 
 pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
     let Access::Sse { url } = &endpoint.access else {
