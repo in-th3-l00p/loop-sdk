@@ -1,5 +1,5 @@
 [workspace]
-members = ["cli", "lib"]
+members = ["cli", "lib", "examples/*"]
 resolver = "3"
 
 # cranelift is unusably slow at compiling wasm modules when built without
