@@ -8,3 +8,6 @@ target/
 
 # OS cruft
 .DS_Store
+
+# example dev-server logs
+dev.log
