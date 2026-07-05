@@ -1,4 +1,3 @@
-pub(crate) mod abi;
 mod error;
 mod executor;
 mod registry;

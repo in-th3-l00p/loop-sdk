@@ -4,15 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-# engine: registers endpoints and manages how they execute (native/wasm
-# dispatch, validation). server: shared HTTP/SSE/WebSocket serving layer on
-# top of the engine, used by the CLI dev server and compiled binaries.
-# compile: builds a loop project into a standalone server binary.
-# All kept out of the default build so consumers who only need Schema/Endpoint
-# definitions stay dependency-light.
-engine = ["dep:tokio", "dep:wasmtime", "dep:wasmtime-wasi"]
+# engine: registers endpoints and manages how they execute (validation +
+# native dispatch). server: shared HTTP/SSE/WebSocket serving layer on top of
+# the engine. Both kept out of the default build so consumers who only need
+# Schema/Endpoint definitions stay dependency-light.
+engine = ["dep:tokio"]
 server = ["engine", "dep:axum", "dep:serde_json", "dep:tokio-stream", "dep:base64"]
-compile = ["dep:serde_json"]
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
@@ -24,13 +21,10 @@ axum = { version = "0.8.9", features = ["ws"], optional = true }
 serde_json = { version = "1", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 base64 = { version = "0.22", optional = true }
-wasmtime = { version = "46", optional = true, default-features = false, features = ["cranelift", "runtime", "wat", "std"] }
-wasmtime-wasi = { version = "46", optional = true, default-features = false, features = ["p1"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio-tungstenite = "0.28"
-tempfile = "3"
 futures-util = "0.3"

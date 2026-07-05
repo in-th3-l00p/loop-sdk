@@ -9,7 +9,6 @@ use std::sync::Arc;
 pub enum Binding {
     Native(Arc<dyn Handler>),
     Stream(Arc<dyn Source>),
-    Wasm { bytes: Vec<u8>, export: String },
 }
 
 #[cfg(test)]
@@ -58,19 +57,5 @@ mod tests {
         let items: Vec<_> = source.subscribe(&[]).unwrap().map(Result::unwrap).collect();
 
         assert_eq!(items, vec![Value::I64(0), Value::I64(1), Value::I64(2)]);
-    }
-
-    #[test]
-    fn wasm_binding_holds_module_bytes_and_export_name() {
-        let binding = Binding::Wasm {
-            bytes: vec![0, 97, 115, 109],
-            export: "add".to_string(),
-        };
-
-        let Binding::Wasm { bytes, export } = &binding else {
-            unreachable!()
-        };
-        assert_eq!(export, "add");
-        assert!(!bytes.is_empty());
     }
 }

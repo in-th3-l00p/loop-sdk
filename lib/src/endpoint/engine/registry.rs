@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 
 use super::error::EngineError;
-use super::executor::{Executor, WasmHandler};
+use super::executor::Executor;
 use crate::endpoint::{Access, Binding, Endpoint, Signature};
 use crate::schema::Value;
 
@@ -124,15 +124,6 @@ fn executor(name: &str, access: &Access, binding: Binding) -> Result<Executor, E
             }
             Ok(Executor::Stream(source))
         }
-        Binding::Wasm { bytes, export } => {
-            if streaming_access {
-                return Err(EngineError::Conflict(format!(
-                    "endpoint {name:?}: wasm bindings do not support streaming access yet"
-                )));
-            }
-            let handler = WasmHandler::new(&bytes, &export).map_err(EngineError::Wasm)?;
-            Ok(Executor::Wasm(Arc::new(handler)))
-        }
     }
 }
 
@@ -210,26 +201,6 @@ mod tests {
                         ),
                     ),
             };
-        assert!(matches!(
-            prepare(vec![endpoint]),
-            Err(EngineError::Conflict(_))
-        ));
-    }
-
-    #[test]
-    fn rejects_wasm_binding_on_streaming_access() {
-        let endpoint = Endpoint {
-            name: "bad".into(),
-            signature: Signature {
-                params: vec![],
-                output: Schema::Primitive(Primitive::I64),
-            },
-            access: Access::Sse { url: "/bad".into() },
-            binding: Binding::Wasm {
-                bytes: vec![],
-                export: "run".into(),
-            },
-        };
         assert!(matches!(
             prepare(vec![endpoint]),
             Err(EngineError::Conflict(_))

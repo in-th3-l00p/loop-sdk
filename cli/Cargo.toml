@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 clap = {"version" = "4.6.1", "features" = ["derive"]}
-lib = { path = "../lib", features = ["server", "compile"] }
+lib = { path = "../lib", features = ["server"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
 

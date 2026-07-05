@@ -11,7 +11,6 @@ pub enum EngineError {
     Output(ValidationError),
     MissingParam(String),
     Handler(String),
-    Wasm(String),
     Io(std::io::Error),
 }
 
@@ -25,7 +24,6 @@ impl fmt::Display for EngineError {
             EngineError::Output(e) => write!(f, "endpoint produced invalid output: {e}"),
             EngineError::MissingParam(name) => write!(f, "missing parameter: {name}"),
             EngineError::Handler(msg) => write!(f, "endpoint failed: {msg}"),
-            EngineError::Wasm(msg) => write!(f, "wasm error: {msg}"),
             EngineError::Io(e) => write!(f, "io error: {e}"),
         }
     }

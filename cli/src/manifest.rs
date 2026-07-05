@@ -4,29 +4,18 @@ use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use lib::compile::{EndpointSpec, Spec};
-use lib::endpoint::{Access, Binding, Endpoint, Signature};
 use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct Manifest {
     pub name: String,
-    #[serde(default, rename = "endpoint")]
-    pub endpoints: Vec<ManifestEndpoint>,
+    #[serde(default)]
+    pub dev: Dev,
 }
 
-#[derive(Deserialize)]
-pub struct ManifestEndpoint {
-    pub name: String,
-    pub access: Access,
-    pub signature: Signature,
-    pub binding: ManifestBinding,
-}
-
-#[derive(Deserialize)]
-pub struct ManifestBinding {
-    pub wasm: PathBuf,
-    pub export: String,
+#[derive(Deserialize, Default)]
+pub struct Dev {
+    pub port: Option<u16>,
 }
 
 #[derive(Debug)]
@@ -38,7 +27,9 @@ pub enum ManifestError {
 impl fmt::Display for ManifestError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ManifestError::Io(path, e) => write!(f, "{}: {e}", path.display()),
+            ManifestError::Io(path, e) => {
+                write!(f, "{}: {e} (is this a loop project?)", path.display())
+            }
             ManifestError::Invalid(e) => write!(f, "invalid loop.toml: {e}"),
         }
     }
@@ -52,116 +43,36 @@ pub fn parse(dir: impl AsRef<Path>) -> Result<Manifest, ManifestError> {
     toml::from_str(&text).map_err(ManifestError::Invalid)
 }
 
-/// Loads the project's endpoints with their wasm artifacts, ready to register
-/// with the engine (used by the dev server).
-pub fn load(dir: impl AsRef<Path>) -> Result<Vec<Endpoint>, ManifestError> {
-    let dir = dir.as_ref();
-    parse(dir)?
-        .endpoints
-        .into_iter()
-        .map(|endpoint| {
-            let wasm_path = dir.join(&endpoint.binding.wasm);
-            let bytes = fs::read(&wasm_path).map_err(|e| ManifestError::Io(wasm_path, e))?;
-            Ok(Endpoint {
-                name: endpoint.name,
-                signature: endpoint.signature,
-                access: endpoint.access,
-                binding: Binding::Wasm {
-                    bytes,
-                    export: endpoint.binding.export,
-                },
-            })
-        })
-        .collect()
-}
-
-/// Interprets the manifest as a compile spec (used by `loop-cli build`).
-pub fn spec(dir: impl AsRef<Path>) -> Result<Spec, ManifestError> {
-    let manifest = parse(dir)?;
-    Ok(Spec {
-        name: manifest.name,
-        endpoints: manifest
-            .endpoints
-            .into_iter()
-            .map(|endpoint| EndpointSpec {
-                name: endpoint.name,
-                access: endpoint.access,
-                signature: endpoint.signature,
-                artifact: endpoint.binding.wasm,
-                export: endpoint.binding.export,
-            })
-            .collect(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const MANIFEST: &str = r#"
-name = "my-api"
-
-[[endpoint]]
-name = "add"
-binding = { wasm = "handlers/add.wasm", export = "add" }
-
-[endpoint.access.Rest]
-method = "POST"
-url = "/add"
-
-[[endpoint.signature.params]]
-name = "a"
-schema = { Primitive = "I64" }
-
-[[endpoint.signature.params]]
-name = "b"
-schema = { Primitive = "I64" }
-
-[endpoint.signature.output]
-Primitive = "I64"
-"#;
-
     #[test]
-    fn loads_manifest_and_reads_wasm_artifacts() {
+    fn parses_name_and_dev_port() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("loop.toml"), MANIFEST).unwrap();
-        fs::create_dir(dir.path().join("handlers")).unwrap();
-        fs::write(dir.path().join("handlers/add.wasm"), b"fake wasm").unwrap();
+        fs::write(
+            dir.path().join("loop.toml"),
+            "name = \"my-api\"\n\n[dev]\nport = 4000\n",
+        )
+        .unwrap();
 
-        let endpoints = load(dir.path()).unwrap();
-
-        assert_eq!(endpoints.len(), 1);
-        assert_eq!(endpoints[0].name, "add");
-        assert_eq!(endpoints[0].signature.params.len(), 2);
-        let Binding::Wasm { bytes, export } = &endpoints[0].binding else {
-            panic!("expected wasm binding");
-        };
-        assert_eq!(export, "add");
-        assert_eq!(bytes, b"fake wasm");
+        let manifest = parse(dir.path()).unwrap();
+        assert_eq!(manifest.name, "my-api");
+        assert_eq!(manifest.dev.port, Some(4000));
     }
 
     #[test]
-    fn interprets_manifest_as_compile_spec() {
+    fn dev_section_is_optional() {
         let dir = tempfile::tempdir().unwrap();
-        fs::write(dir.path().join("loop.toml"), MANIFEST).unwrap();
+        fs::write(dir.path().join("loop.toml"), "name = \"my-api\"\n").unwrap();
 
-        let spec = spec(dir.path()).unwrap();
-
-        assert_eq!(spec.name, "my-api");
-        assert_eq!(spec.endpoints.len(), 1);
-        assert_eq!(
-            spec.endpoints[0].artifact,
-            PathBuf::from("handlers/add.wasm")
-        );
-        assert_eq!(spec.endpoints[0].export, "add");
+        let manifest = parse(dir.path()).unwrap();
+        assert_eq!(manifest.dev.port, None);
     }
 
     #[test]
-    fn fails_for_missing_manifest_and_missing_wasm() {
+    fn fails_for_missing_manifest() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(matches!(load(dir.path()), Err(ManifestError::Io(_, _))));
-
-        fs::write(dir.path().join("loop.toml"), MANIFEST).unwrap();
-        assert!(matches!(load(dir.path()), Err(ManifestError::Io(_, _))));
+        assert!(matches!(parse(dir.path()), Err(ManifestError::Io(_, _))));
     }
 }

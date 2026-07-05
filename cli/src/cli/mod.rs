@@ -14,8 +14,8 @@ pub struct Args {
 pub enum Commands {
     Init,
     Dev {
-        #[arg(long, default_value_t = 3000)]
-        port: u16,
+        #[arg(long)]
+        port: Option<u16>,
         #[arg(long, default_value = ".")]
         dir: String,
     },

@@ -2,12 +2,11 @@
 
 Core crate of the loop SDK. The default build is definitions-only (schemas + endpoint declarations); everything heavier is opt-in via cargo features:
 
-| Feature   | Adds                                                                | Key deps                 |
-| --------- | ------------------------------------------------------------------- | ------------------------ |
-| (default) | `schema`, `endpoint` type definitions                                | serde, bson, http        |
-| `engine`  | `endpoint::engine` — registers endpoints and executes them          | tokio, wasmtime (+ wasi) |
-| `server`  | `server` — HTTP/SSE/WebSocket layer on top of the engine            | axum                     |
-| `compile` | `compile` — builds a loop project into a standalone server binary   | serde_json               |
+| Feature   | Adds                                                       | Key deps |
+| --------- | ---------------------------------------------------------- | -------- |
+| (default) | `schema`, `endpoint` type definitions                       | serde, bson, http |
+| `engine`  | `endpoint::engine` — registers endpoints and executes them | tokio    |
+| `server`  | `server` — HTTP/SSE/WebSocket layer on top of the engine   | axum     |
 
 ## `schema`
 
@@ -19,24 +18,20 @@ Core crate of the loop SDK. The default build is definitions-only (schemas + end
 
 - `Access` — how a client reaches an endpoint: `Rest{method,url}` | `Live{url}` (read-only WebSocket) | `Sse{url}`.
 - `Signature` — `params: Vec<Parameter>` + `output: Schema`.
-- `Binding` — how it executes: `Native(Arc<dyn Handler>)` | `Stream(Arc<dyn Source>)` | `Wasm{bytes, export}`.
+- `Binding` — how it executes: `Native(Arc<dyn Handler>)` for request/response, `Stream(Arc<dyn Source>)` for push feeds. Closures qualify for both via blanket impls.
 - `Endpoint` — `{ name, signature, access, binding }`.
 
 ### `endpoint::engine` (feature `engine`)
 
-Registration and execution only — no networking. `Engine::new` validates registrations (route conflicts, binding/access compatibility) and compiles wasm modules once. `Engine::call/stream(name, args)` (or `RegisteredEndpoint::call/stream`) validate inputs/outputs and dispatch to the native handler, stream source, or wasm executor. The wasm ABI (`abi.rs`): guest exports `memory`, `loop_alloc(len) -> ptr`, and `<export>(ptr, len) -> packed_ptr_len`; frames are BSON `{args: [...]}` in, `{ok: value}` / `{err: msg}` out; wasip1 imports are provided.
+Registration and execution only — no networking. `Engine::new` validates registrations (route conflicts, binding/access compatibility). `Engine::call/stream(name, args)` (or `RegisteredEndpoint::call/stream`) validate inputs/outputs against the signature and dispatch to the handler or stream source.
 
 ## `server` (feature `server`)
 
-The shared serving layer used by both the CLI dev server and compiled binaries: `router(&Engine)`, `routes(&Engine)`, `serve`, `serve_blocking`.
+The shared serving layer: `router(&Engine)`, `routes(&Engine)`, `serve`, `serve_blocking`.
 
 - `protocol/` — one adapter per `Access` variant (rest, sse, live).
 - `wire/` — `json` (schema-guided Value↔JSON codec; no enum tags on the wire) and `request` (path > body > query parameter mapping).
 
-## `compile` (feature `compile`)
+## Loop projects
 
-`build(spec, project_dir, options)` compiles a loop project into a standalone server binary: `codegen` generates a hidden cargo crate (from `templates`) that embeds the endpoint spec + wasm artifacts, then `cargo build --release` produces the executable. Language-agnostic: any endpoint logic that compiles to a wasm artifact works.
-
-## Consumers
-
-The `cli` crate owns manifest interpretation (`loop.toml`) and the dev workflow (`init`, `dev`, `build`); compiled standalone binaries embed everything and need no project files at runtime.
+A loop project is a Rust crate that depends on this lib, defines its endpoints natively, and serves them with `lib::server`. The `cli` crate manages the workflow: `loop init` scaffolds a project (with `loop.toml` carrying its name and dev config), `loop dev` runs it (port via the `LOOP_PORT` env var), and `loop build` produces the release binary.

@@ -1,7 +1,4 @@
 mod native;
-mod wasm;
-
-pub use wasm::WasmHandler;
 
 use std::sync::Arc;
 
@@ -13,14 +10,12 @@ use crate::schema::Value;
 pub enum Executor {
     Native(Arc<dyn Handler>),
     Stream(Arc<dyn Source>),
-    Wasm(Arc<WasmHandler>),
 }
 
 impl Executor {
     pub async fn call(&self, args: Vec<Value>) -> Result<Value, HandlerError> {
         match self {
             Executor::Native(handler) => native::call(handler.clone(), args).await,
-            Executor::Wasm(handler) => handler.call(args).await,
             Executor::Stream(_) => {
                 Err("streaming endpoint does not support request/response calls".into())
             }
@@ -39,7 +34,6 @@ impl Executor {
                 let _ = tx.send(result).await;
                 Ok(rx)
             }
-            Executor::Wasm(_) => Err("wasm endpoints do not support streaming yet".into()),
         }
     }
 }
