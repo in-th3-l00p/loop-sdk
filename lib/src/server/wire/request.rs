@@ -15,12 +15,19 @@ pub fn collect_args(
     query: &HashMap<String, String>,
     body: Option<&Json>,
 ) -> Result<Vec<Value>, EngineError> {
+    let body_param = single_record_param(signature);
+
     signature
         .params
         .iter()
         .map(|param| {
+            let whole_body = body_param == Some(param.name.as_str());
             let value = if let Some(raw) = path.get(&param.name) {
                 decode_scalar(&param.name, &param.schema, raw)?
+            } else if whole_body {
+                let body = body.ok_or_else(|| EngineError::MissingParam(param.name.clone()))?;
+                json::decode(&param.schema, body)
+                    .map_err(|e| EngineError::Decode(format!("parameter {:?}: {e}", param.name)))?
             } else if let Some(value) = body.and_then(|b| b.get(&param.name)) {
                 json::decode(&param.schema, value)
                     .map_err(|e| EngineError::Decode(format!("parameter {:?}: {e}", param.name)))?
@@ -35,6 +42,17 @@ pub fn collect_args(
         .collect()
 }
 
+fn single_record_param(signature: &Signature) -> Option<&str> {
+    let mut records = signature
+        .params
+        .iter()
+        .filter(|param| matches!(param.schema.base(), Schema::Record(_)));
+    match (records.next(), records.next()) {
+        (Some(param), None) => Some(&param.name),
+        _ => None,
+    }
+}
+
 fn decode_scalar(name: &str, schema: &Schema, raw: &str) -> Result<Value, EngineError> {
     let error = |expected: &str| {
         EngineError::Decode(format!(
@@ -42,9 +60,9 @@ fn decode_scalar(name: &str, schema: &Schema, raw: &str) -> Result<Value, Engine
         ))
     };
 
-    let Schema::Primitive(primitive) = schema else {
+    let Schema::Primitive(primitive) = schema.base() else {
         return Err(error(
-            "a primitive (path/query parameters cannot be lists or maps)",
+            "a primitive (path/query parameters cannot be lists, maps or records)",
         ));
     };
 
@@ -138,5 +156,74 @@ mod tests {
                 Value::I64(3)
             ])]
         );
+    }
+
+    fn record() -> Schema {
+        Schema::Record(vec![("name".into(), Schema::Primitive(Primitive::Str))])
+    }
+
+    #[test]
+    fn single_record_param_takes_the_whole_body() {
+        let signature = signature(vec![
+            ("id", Schema::Primitive(Primitive::U64)),
+            ("person", record()),
+        ]);
+        let path = HashMap::from([("id".to_string(), "7".to_string())]);
+        let body = json!({"name": "ada"});
+
+        let args = collect_args(&signature, &path, &HashMap::new(), Some(&body)).unwrap();
+        assert_eq!(
+            args,
+            vec![
+                Value::U64(7),
+                Value::Map(vec![(Value::Str("name".into()), Value::Str("ada".into()))]),
+            ]
+        );
+    }
+
+    #[test]
+    fn single_record_param_requires_a_body() {
+        let signature = signature(vec![("person", record())]);
+        assert!(matches!(
+            collect_args(&signature, &HashMap::new(), &HashMap::new(), None),
+            Err(EngineError::MissingParam(name)) if name == "person"
+        ));
+    }
+
+    #[test]
+    fn multiple_record_params_stay_keyed_by_name() {
+        let signature = signature(vec![("a", record()), ("b", record())]);
+        let body = json!({"a": {"name": "x"}, "b": {"name": "y"}});
+
+        let args = collect_args(&signature, &HashMap::new(), &HashMap::new(), Some(&body)).unwrap();
+        assert_eq!(args.len(), 2);
+    }
+
+    #[test]
+    fn constrained_scalars_decode_in_path_and_query() {
+        let signature = signature(vec![(
+            "age",
+            Schema::Constrained(
+                Box::new(Schema::Primitive(Primitive::U32)),
+                vec![crate::schema::Constraint::Min(18.0)],
+            ),
+        )]);
+        let query = HashMap::from([("age".to_string(), "21".to_string())]);
+
+        let args = collect_args(&signature, &HashMap::new(), &query, None).unwrap();
+        assert_eq!(args, vec![Value::U32(21)]);
+    }
+
+    #[test]
+    fn record_params_cannot_come_from_the_query() {
+        let signature = signature(vec![("person", record()), ("also", record())]);
+        let query = HashMap::from([
+            ("person".to_string(), "x".to_string()),
+            ("also".to_string(), "y".to_string()),
+        ]);
+        assert!(matches!(
+            collect_args(&signature, &HashMap::new(), &query, None),
+            Err(EngineError::Decode(_))
+        ));
     }
 }

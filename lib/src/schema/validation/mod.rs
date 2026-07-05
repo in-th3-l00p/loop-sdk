@@ -1,7 +1,9 @@
+mod constraint;
 mod error;
 mod validator;
 mod value;
 
+pub use constraint::Constraint;
 pub use error::ValidationError;
 pub use value::Value;
 

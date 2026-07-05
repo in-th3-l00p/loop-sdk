@@ -54,6 +54,30 @@ mod tests {
     }
 
     #[test]
+    fn saves_and_loads_record_and_constrained_schemas() {
+        let path = temp_path("loop_sdk_schema_test_record.bson");
+        let schema = Schema::Record(vec![
+            ("name".into(), Schema::Primitive(Primitive::Str)),
+            (
+                "age".into(),
+                Schema::Constrained(
+                    Box::new(Schema::Primitive(Primitive::U32)),
+                    vec![
+                        crate::schema::Constraint::Min(0.0),
+                        crate::schema::Constraint::Max(150.0),
+                    ],
+                ),
+            ),
+        ]);
+
+        schema.save(&path).expect("failed to save schema");
+        let loaded = Schema::load(&path).expect("failed to load schema");
+
+        assert_eq!(schema, loaded);
+        fs::remove_file(&path).unwrap();
+    }
+
+    #[test]
     fn load_fails_for_missing_file() {
         let path = temp_path("loop_sdk_schema_test_missing_file_that_does_not_exist.bson");
         assert!(Schema::load(&path).is_err());

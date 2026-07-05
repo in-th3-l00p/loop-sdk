@@ -11,5 +11,5 @@ pub mod prelude {
     pub use crate::schema::{AsSchema, Blob, Date, FromValue, IntoValue};
 
     #[cfg(feature = "macros")]
-    pub use loop_macros::{live, rest, sse};
+    pub use loop_macros::{Schema, live, rest, sse};
 }

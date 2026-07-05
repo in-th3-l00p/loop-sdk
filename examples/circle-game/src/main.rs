@@ -15,12 +15,12 @@ const FRAME: Duration = Duration::from_millis(50);
 static PLAYERS: Mutex<[(f64, f64); 2]> = Mutex::new([(80.0, 80.0), (320.0, 320.0)]);
 
 #[rest(get, "/move/{player}")]
-fn move_player(player: u32, dx: f64, dy: f64) -> Result<bool, HandlerError> {
-    let index = match player {
-        1 => 0,
-        2 => 1,
-        _ => return Err("player must be 1 or 2".into()),
-    };
+fn move_player(
+    #[check(one_of(1, 2))] player: u32,
+    #[check(min = -50.0, max = 50.0)] dx: f64,
+    #[check(min = -50.0, max = 50.0)] dy: f64,
+) -> bool {
+    let index = (player - 1) as usize;
 
     let mut players = PLAYERS.lock().unwrap();
     let (x, y) = players[index];
@@ -28,7 +28,7 @@ fn move_player(player: u32, dx: f64, dy: f64) -> Result<bool, HandlerError> {
         (x + dx).clamp(RADIUS, BOARD - RADIUS),
         (y + dy).clamp(RADIUS, BOARD - RADIUS),
     );
-    Ok(true)
+    true
 }
 
 #[live("/watch")]

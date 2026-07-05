@@ -1,13 +1,13 @@
-/* the attribute macros of the loop SDK: an endpoint is a plain function
-plus one of #[rest(method, "url")], #[sse("url")] or #[live("url")] —
-schemas are inferred from the function's signature and the endpoint is
-registered automatically */
+mod check;
+mod derive;
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
-use syn::{Error, FnArg, Ident, ItemFn, LitStr, Pat, Result, Token, Type, parse_macro_input};
+use syn::{
+    DeriveInput, Error, FnArg, Ident, ItemFn, LitStr, Pat, Result, Token, Type, parse_macro_input,
+};
 
 #[proc_macro_attribute]
 pub fn rest(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -47,6 +47,14 @@ pub fn live(attr: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
+#[proc_macro_derive(Schema, attributes(check))]
+pub fn derive_schema(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    derive::expand(input)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
+
 enum Kind {
     Call,
     Stream,
@@ -77,14 +85,15 @@ impl Parse for RestArgs {
     }
 }
 
-fn expand(function: ItemFn, access: TokenStream2, kind: Kind) -> Result<TokenStream2> {
-    let name = &function.sig.ident;
+fn expand(mut function: ItemFn, access: TokenStream2, kind: Kind) -> Result<TokenStream2> {
+    let name = function.sig.ident.clone();
     let name_str = name.to_string();
     let factory = format_ident!("__loop_endpoint_{name}");
 
     let mut arg_names = Vec::new();
-    let mut arg_types: Vec<&Type> = Vec::new();
-    for input in &function.sig.inputs {
+    let mut arg_types: Vec<Type> = Vec::new();
+    let mut arg_schemas = Vec::new();
+    for input in function.sig.inputs.iter_mut() {
         let FnArg::Typed(arg) = input else {
             return Err(Error::new_spanned(
                 input,
@@ -97,8 +106,11 @@ fn expand(function: ItemFn, access: TokenStream2, kind: Kind) -> Result<TokenStr
                 "endpoint parameters must be plain identifiers",
             ));
         };
+        let ty = arg.ty.as_ref().clone();
+        let constraints = check::extract(&mut arg.attrs, &ty)?;
+        arg_schemas.push(check::schema(&ty, &constraints));
         arg_names.push(pat.ident.clone());
-        arg_types.push(&arg.ty);
+        arg_types.push(ty);
     }
     let arg_labels: Vec<String> = arg_names.iter().map(Ident::to_string).collect();
 
@@ -139,7 +151,7 @@ fn expand(function: ItemFn, access: TokenStream2, kind: Kind) -> Result<TokenStr
                     params: vec![
                         #(::lib::endpoint::Parameter {
                             name: #arg_labels.into(),
-                            schema: <#arg_types as ::lib::schema::AsSchema>::schema(),
+                            schema: #arg_schemas,
                         },)*
                     ],
                     output: __output_schema(&#name),

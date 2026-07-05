@@ -15,6 +15,7 @@ macros = ["dep:loop-macros", "dep:inventory"]
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
+regex-lite = "0.1"
 http = "1.4.2"
 http-serde = "2.1.1"
 bson = { version = "3.1.0", features = ["serde"] }

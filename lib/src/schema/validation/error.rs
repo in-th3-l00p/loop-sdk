@@ -18,6 +18,13 @@ pub enum ValidationError {
         index: usize,
         source: Box<ValidationError>,
     },
+    Field {
+        name: String,
+        source: Box<ValidationError>,
+    },
+    MissingField(String),
+    UnknownField(String),
+    Constraint(String),
 }
 
 impl fmt::Display for ValidationError {
@@ -35,6 +42,12 @@ impl fmt::Display for ValidationError {
             ValidationError::MapValue { index, source } => {
                 write!(f, "map value {index}: {source}")
             }
+            ValidationError::Field { name, source } => {
+                write!(f, "field {name:?}: {source}")
+            }
+            ValidationError::MissingField(name) => write!(f, "missing field {name:?}"),
+            ValidationError::UnknownField(name) => write!(f, "unknown field {name:?}"),
+            ValidationError::Constraint(message) => write!(f, "{message}"),
         }
     }
 }

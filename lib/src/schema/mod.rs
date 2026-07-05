@@ -3,7 +3,7 @@ mod serialization;
 mod validation;
 
 pub use convert::{AsSchema, Blob, Date, FromValue, IntoValue};
-pub use validation::{ValidationError, Value};
+pub use validation::{Constraint, ValidationError, Value};
 
 use serde::{Deserialize, Serialize};
 
@@ -43,4 +43,15 @@ pub enum Schema {
     Primitive(Primitive),
     List(Box<Schema>),
     Map(Box<Schema>, Box<Schema>),
+    Record(Vec<(String, Schema)>),
+    Constrained(Box<Schema>, Vec<Constraint>),
+}
+
+impl Schema {
+    pub fn base(&self) -> &Schema {
+        match self {
+            Schema::Constrained(inner, _) => inner.base(),
+            other => other,
+        }
+    }
 }

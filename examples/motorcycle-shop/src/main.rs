@@ -1,17 +1,24 @@
-/* a complete REST CRUD API for a motorcycle shop, built with the loop SDK
-attribute UX: schemas come from the function signatures */
-
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
 use lib::prelude::*;
 
-#[derive(Clone)]
+#[derive(Schema, Clone)]
 struct Motorcycle {
+    #[check(min_len = 1)]
     brand: String,
+    #[check(min_len = 1)]
     model: String,
+    #[check(min = 1885, max = 2100)]
     year: u32,
+    #[check(min = 0.0)]
     price: f64,
+}
+
+#[derive(Schema)]
+struct Listing {
+    id: u64,
+    motorcycle: Motorcycle,
 }
 
 struct Shop {
@@ -25,54 +32,41 @@ static SHOP: Mutex<Shop> = Mutex::new(Shop {
 });
 
 #[rest(post, "/motorcycles")]
-fn create(brand: String, model: String, year: u32, price: f64) -> u64 {
+fn create(motorcycle: Motorcycle) -> u64 {
     let mut shop = SHOP.lock().unwrap();
     shop.next_id += 1;
     let id = shop.next_id;
-    shop.inventory.insert(
-        id,
-        Motorcycle {
-            brand,
-            model,
-            year,
-            price,
-        },
-    );
+    shop.inventory.insert(id, motorcycle);
     id
 }
 
 #[rest(get, "/motorcycles")]
-fn list() -> Vec<BTreeMap<String, String>> {
+fn list() -> Vec<Listing> {
     let shop = SHOP.lock().unwrap();
     shop.inventory
         .iter()
-        .map(|(id, motorcycle)| record(*id, motorcycle))
+        .map(|(id, motorcycle)| Listing {
+            id: *id,
+            motorcycle: motorcycle.clone(),
+        })
         .collect()
 }
 
 #[rest(get, "/motorcycles/{id}")]
-fn get(id: u64) -> Result<BTreeMap<String, String>, HandlerError> {
+fn get(id: u64) -> Result<Listing, HandlerError> {
     let shop = SHOP.lock().unwrap();
     let motorcycle = shop.inventory.get(&id).ok_or(not_found(id))?;
-    Ok(record(id, motorcycle))
+    Ok(Listing {
+        id,
+        motorcycle: motorcycle.clone(),
+    })
 }
 
 #[rest(put, "/motorcycles/{id}")]
-fn update(
-    id: u64,
-    brand: String,
-    model: String,
-    year: u32,
-    price: f64,
-) -> Result<bool, HandlerError> {
+fn update(id: u64, motorcycle: Motorcycle) -> Result<bool, HandlerError> {
     let mut shop = SHOP.lock().unwrap();
-    let motorcycle = shop.inventory.get_mut(&id).ok_or(not_found(id))?;
-    *motorcycle = Motorcycle {
-        brand,
-        model,
-        year,
-        price,
-    };
+    let existing = shop.inventory.get_mut(&id).ok_or(not_found(id))?;
+    *existing = motorcycle;
     Ok(true)
 }
 
@@ -81,18 +75,6 @@ fn delete(id: u64) -> Result<bool, HandlerError> {
     let mut shop = SHOP.lock().unwrap();
     shop.inventory.remove(&id).ok_or(not_found(id))?;
     Ok(true)
-}
-
-// records go out as string-to-string maps until the schema grows a proper
-// record type with per-field schemas
-fn record(id: u64, motorcycle: &Motorcycle) -> BTreeMap<String, String> {
-    BTreeMap::from([
-        ("id".to_string(), id.to_string()),
-        ("brand".to_string(), motorcycle.brand.clone()),
-        ("model".to_string(), motorcycle.model.clone()),
-        ("year".to_string(), motorcycle.year.to_string()),
-        ("price".to_string(), motorcycle.price.to_string()),
-    ])
 }
 
 fn not_found(id: u64) -> HandlerError {

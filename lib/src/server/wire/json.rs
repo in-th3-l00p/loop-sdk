@@ -19,7 +19,32 @@ pub fn decode(schema: &Schema, json: &Json) -> Result<Value, String> {
                 .map(Value::List)
         }
         Schema::Map(key, value) => decode_map(key, value, json),
+        Schema::Record(fields) => decode_record(fields, json),
+        Schema::Constrained(inner, _) => decode(inner, json),
     }
+}
+
+fn decode_record(fields: &[(String, Schema)], json: &Json) -> Result<Value, String> {
+    let Json::Object(object) = json else {
+        return Err(mismatch("object", json));
+    };
+
+    if let Some(unknown) = object
+        .keys()
+        .find(|key| !fields.iter().any(|(name, _)| name == key.as_str()))
+    {
+        return Err(format!("unknown field {unknown:?}"));
+    }
+
+    fields
+        .iter()
+        .map(|(name, schema)| {
+            let field = object.get(name).ok_or(format!("missing field {name:?}"))?;
+            let decoded = decode(schema, field).map_err(|e| format!("field {name:?}: {e}"))?;
+            Ok((Value::Str(name.clone()), decoded))
+        })
+        .collect::<Result<Vec<_>, String>>()
+        .map(Value::Map)
 }
 
 fn decode_primitive(primitive: &Primitive, json: &Json) -> Result<Value, String> {
@@ -213,5 +238,57 @@ mod tests {
         let schema = Schema::List(Box::new(Schema::Primitive(Primitive::I64)));
         let err = decode(&schema, &json!([1, "bad"])).unwrap_err();
         assert!(err.contains("item 1"), "unexpected message: {}", err);
+    }
+
+    fn person_schema() -> Schema {
+        Schema::Record(vec![
+            ("name".into(), Schema::Primitive(Primitive::Str)),
+            ("age".into(), Schema::Primitive(Primitive::U32)),
+        ])
+    }
+
+    #[test]
+    fn decodes_record_fields_by_their_own_schemas() {
+        let decoded = decode(&person_schema(), &json!({"name": "ada", "age": 36})).unwrap();
+        assert_eq!(
+            decoded,
+            Value::Map(vec![
+                (Value::Str("name".into()), Value::Str("ada".into())),
+                (Value::Str("age".into()), Value::U32(36)),
+            ])
+        );
+    }
+
+    #[test]
+    fn record_decode_rejects_missing_unknown_and_mistyped_fields() {
+        assert!(
+            decode(&person_schema(), &json!({"name": "ada"}))
+                .unwrap_err()
+                .contains("missing field \"age\"")
+        );
+        assert!(
+            decode(&person_schema(), &json!({"name": "ada", "age": 36, "x": 1}))
+                .unwrap_err()
+                .contains("unknown field \"x\"")
+        );
+        assert!(
+            decode(&person_schema(), &json!({"name": "ada", "age": "old"}))
+                .unwrap_err()
+                .contains("field \"age\"")
+        );
+        assert!(
+            decode(&person_schema(), &json!([1]))
+                .unwrap_err()
+                .contains("expected object")
+        );
+    }
+
+    #[test]
+    fn constrained_schemas_decode_through_their_inner_schema() {
+        let schema = Schema::Constrained(
+            Box::new(Schema::Primitive(Primitive::I64)),
+            vec![crate::schema::Constraint::Min(0.0)],
+        );
+        assert_eq!(decode(&schema, &json!(-5)).unwrap(), Value::I64(-5));
     }
 }

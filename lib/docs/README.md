@@ -15,12 +15,25 @@ fn ticks(from: i64) -> Result<impl Iterator<Item = i64>, HandlerError> {
     Ok(from..from + 3)
 }
 
+#[derive(Schema, Clone)]
+struct Motorcycle {
+    #[check(min_len = 1)]
+    brand: String,
+    #[check(min = 1885, max = 2100)]
+    year: u32,
+}
+
+#[rest(post, "/motorcycles")]
+fn create(motorcycle: Motorcycle) -> u64 { /* whole JSON body = the record */ }
+
 fn main() {
     lib::server::run(); // serves every attributed endpoint (LOOP_ADDR/LOOP_PORT)
 }
 ```
 
-Schemas are inferred from the function signature (`bool`, ints, floats, `String`, `Blob`, `Date`, `Vec<T>`, `BTreeMap`/`HashMap<K, V>`). REST handlers return `T` or `Result<T, HandlerError>`; streaming (`sse`/`live`) handlers return `Result<impl Iterator<Item = T>, HandlerError>`. The manual `Endpoint { .. }` API underneath stays public.
+Schemas are inferred from the function signature (`bool`, ints, floats, `String`, `Blob`, `Date`, `Vec<T>`, `BTreeMap`/`HashMap<K, V>`, and any `#[derive(Schema)]` struct). REST handlers return `T` or `Result<T, HandlerError>`; streaming (`sse`/`live`) handlers return `Result<impl Iterator<Item = T>, HandlerError>`. The manual `Endpoint { .. }` API underneath stays public.
+
+`#[check(...)]` on parameters and derived fields attaches declarative constraints, validated by the engine on inputs and outputs: `min`/`max` (numeric bounds), `min_len`/`max_len` (str/list/blob/map length), `pattern` (regex on str), `one_of(a, b, ...)`. When a REST endpoint has exactly one record parameter, the whole request body is that record; other parameters resolve from path and query.
 
 The default build is definitions-only (schemas + endpoint declarations); everything heavier is opt-in via cargo features:
 
@@ -34,8 +47,10 @@ The default build is definitions-only (schemas + endpoint declarations); everyth
 ## `schema`
 
 - `Primitive` — leaf types: `Bool, I32, U32, I64, U64, F32, F64, Str, Date, Blob` (`.kind()` gives the display name).
-- `Schema` — recursive descriptor: `Primitive | List(Box<Schema>) | Map(Box<Schema>, Box<Schema>)`; `save`/`load` persist as BSON.
-- `Value` — a runtime instance mirroring the above; `Schema::validate(&Value)` checks conformance with path-aware `ValidationError`s.
+- `Schema` — recursive descriptor: `Primitive | List(Box<Schema>) | Map(Box<Schema>, Box<Schema>) | Record(Vec<(String, Schema)>) | Constrained(Box<Schema>, Vec<Constraint>)`; `save`/`load` persist as BSON; `.base()` unwraps constraints.
+- `Constraint` — declarative refinements: `Min/Max`, `MinLen/MaxLen`, `Pattern`, `OneOf`.
+- `Value` — a runtime instance; records are string-keyed maps. `Schema::validate(&Value)` checks shape and constraints with path-aware `ValidationError`s (`field "year": must be at least 1885`).
+- `convert` — `AsSchema`/`IntoValue`/`FromValue` bridge Rust types to schemas and values; `#[derive(Schema)]` implements them for structs.
 
 ## `endpoint`
 
