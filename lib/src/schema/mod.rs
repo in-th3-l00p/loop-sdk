@@ -1,6 +1,8 @@
+pub mod convert;
 mod serialization;
 mod validation;
 
+pub use convert::{AsSchema, Blob, Date, FromValue, IntoValue};
 pub use validation::{ValidationError, Value};
 
 use serde::{Deserialize, Serialize};

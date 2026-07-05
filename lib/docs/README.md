@@ -1,12 +1,35 @@
 # lib
 
-Core crate of the loop SDK. The default build is definitions-only (schemas + endpoint declarations); everything heavier is opt-in via cargo features:
+Core crate of the loop SDK. The everyday UX is one attribute per endpoint:
 
-| Feature   | Adds                                                       | Key deps |
-| --------- | ---------------------------------------------------------- | -------- |
-| (default) | `schema`, `endpoint` type definitions                       | serde, bson, http |
-| `engine`  | `endpoint::engine` — registers endpoints and executes them | tokio    |
-| `server`  | `server` — HTTP/SSE/WebSocket layer on top of the engine   | axum     |
+```rust
+use lib::prelude::*;
+
+#[rest(post, "/add")]
+fn add(a: i64, b: i64) -> i64 {
+    a + b
+}
+
+#[sse("/ticks")]
+fn ticks(from: i64) -> Result<impl Iterator<Item = i64>, HandlerError> {
+    Ok(from..from + 3)
+}
+
+fn main() {
+    lib::server::run(); // serves every attributed endpoint (LOOP_ADDR/LOOP_PORT)
+}
+```
+
+Schemas are inferred from the function signature (`bool`, ints, floats, `String`, `Blob`, `Date`, `Vec<T>`, `BTreeMap`/`HashMap<K, V>`). REST handlers return `T` or `Result<T, HandlerError>`; streaming (`sse`/`live`) handlers return `Result<impl Iterator<Item = T>, HandlerError>`. The manual `Endpoint { .. }` API underneath stays public.
+
+The default build is definitions-only (schemas + endpoint declarations); everything heavier is opt-in via cargo features:
+
+| Feature   | Adds                                                        | Key deps |
+| --------- | ----------------------------------------------------------- | -------- |
+| (default) | `schema`, `endpoint` type definitions, conversion traits    | serde, bson, http |
+| `engine`  | `endpoint::engine` — registers endpoints and executes them  | tokio    |
+| `server`  | `server` — HTTP/SSE/WebSocket layer on top of the engine    | axum     |
+| `macros`  | `#[rest]`/`#[sse]`/`#[live]` + auto-registration + `server::run` | loop-macros, inventory |
 
 ## `schema`
 

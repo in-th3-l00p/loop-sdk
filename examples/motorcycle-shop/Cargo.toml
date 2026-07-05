@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-lib = { path = "../../lib", features = ["server"] }
-http = "1"
+lib = { path = "../../lib", features = ["server", "macros"] }
 
 [workspace]

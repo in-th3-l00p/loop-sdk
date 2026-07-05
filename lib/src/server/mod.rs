@@ -4,6 +4,34 @@ CLI dev server and by compiled standalone binaries */
 mod protocol;
 mod wire;
 
+/// Serves every endpoint declared with the loop attributes. Address and port
+/// come from `LOOP_ADDR`/`LOOP_PORT` (defaults: 127.0.0.1:3000).
+#[cfg(feature = "macros")]
+pub fn run() {
+    let addr = std::env::var("LOOP_ADDR").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let port: u16 = std::env::var("LOOP_PORT")
+        .ok()
+        .and_then(|port| port.parse().ok())
+        .unwrap_or(3000);
+
+    let engine = match Engine::new(crate::endpoint::registered()) {
+        Ok(engine) => engine,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    println!("listening on http://{addr}:{port}");
+    for route in routes(&engine) {
+        println!("  {route}");
+    }
+    if let Err(e) = serve_blocking(engine, (addr, port)) {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+}
+
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};

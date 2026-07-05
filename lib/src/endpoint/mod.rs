@@ -1,10 +1,11 @@
 mod binding;
 #[cfg(feature = "engine")]
 pub mod engine;
+mod output;
 
 pub use binding::{Binding, Handler, HandlerError, Source, ValueStream};
-
-use http::Method;
+pub use http::Method;
+pub use output::{IntoHandlerOutput, StreamOutput};
 use serde::{Deserialize, Serialize};
 
 use crate::schema::Schema;
@@ -41,4 +42,19 @@ pub struct Endpoint {
     pub signature: Signature,
     pub access: Access,
     pub binding: Binding,
+}
+
+/// A factory the attribute macros submit to the global registry.
+#[cfg(feature = "macros")]
+pub struct Registration(pub fn() -> Endpoint);
+
+#[cfg(feature = "macros")]
+inventory::collect!(Registration);
+
+/// All endpoints declared with the `#[rest]`/`#[sse]`/`#[live]` attributes.
+#[cfg(feature = "macros")]
+pub fn registered() -> Vec<Endpoint> {
+    inventory::iter::<Registration>()
+        .map(|registration| (registration.0)())
+        .collect()
 }

@@ -1,12 +1,9 @@
-/* demonstrates streaming on the loop SDK: an Sse endpoint that forwards
-tokens from a locally running ollama instance as they are generated */
+/* demonstrates streaming on the loop SDK attribute UX: an Sse endpoint that
+forwards tokens from a locally running ollama instance as they generate */
 
 use std::io::{BufRead, BufReader};
-use std::sync::Arc;
 
-use lib::endpoint::engine::Engine;
-use lib::endpoint::{Access, Binding, Endpoint, HandlerError, Parameter, Signature, ValueStream};
-use lib::schema::{Primitive, Schema, Value};
+use lib::prelude::*;
 use serde::Deserialize;
 
 const OLLAMA: &str = "http://localhost:11434/api/generate";
@@ -18,47 +15,8 @@ struct Chunk {
     done: bool,
 }
 
-fn main() {
-    let port: u16 = std::env::var("LOOP_PORT")
-        .ok()
-        .and_then(|port| port.parse().ok())
-        .unwrap_or(3000);
-
-    let engine = Engine::new(vec![generate_endpoint()]).expect("invalid endpoint definitions");
-    println!("ollama streaming demo listening on http://127.0.0.1:{port}");
-    for route in lib::server::routes(&engine) {
-        println!("  {route}");
-    }
-    lib::server::serve_blocking(engine, ("127.0.0.1", port)).expect("server failed");
-}
-
-// SSE /generate?prompt=... -> one event per generated token
-fn generate_endpoint() -> Endpoint {
-    Endpoint {
-        name: "generate".into(),
-        signature: Signature {
-            params: vec![Parameter {
-                name: "prompt".into(),
-                schema: Schema::Primitive(Primitive::Str),
-            }],
-            output: Schema::Primitive(Primitive::Str),
-        },
-        access: Access::Sse {
-            url: "/generate".into(),
-        },
-        binding: Binding::Stream(Arc::new(
-            |args: &[Value]| -> Result<ValueStream, HandlerError> {
-                let [Value::Str(prompt)] = args else {
-                    return Err("expected a prompt".into());
-                };
-                tokens(prompt)
-            },
-        )),
-    }
-}
-
-// opens a streaming generate request and yields each NDJSON chunk's token
-fn tokens(prompt: &str) -> Result<ValueStream, HandlerError> {
+#[sse("/generate")]
+fn generate(prompt: String) -> Result<impl Iterator<Item = String>, HandlerError> {
     let response = ureq::post(OLLAMA)
         .send_json(ureq::json!({
             "model": MODEL,
@@ -76,24 +34,16 @@ fn tokens(prompt: &str) -> Result<ValueStream, HandlerError> {
             if done {
                 return None;
             }
-            Some(match parse(line) {
-                Ok(chunk) => {
-                    done = chunk.done;
-                    Ok(Value::Str(chunk.response))
-                }
-                Err(e) => {
-                    done = true;
-                    Err(e)
-                }
-            })
+            let chunk: Chunk = serde_json::from_str(&line.ok()?).ok()?;
+            done = chunk.done;
+            Some(chunk.response)
         })
         // thinking models emit response-less chunks while reasoning
-        .filter(|token| !matches!(token, Ok(Value::Str(s)) if s.is_empty()));
+        .filter(|token| !token.is_empty());
 
-    Ok(Box::new(tokens))
+    Ok(tokens)
 }
 
-fn parse(line: std::io::Result<String>) -> Result<Chunk, HandlerError> {
-    let line = line.map_err(|e| format!("stream interrupted: {e}"))?;
-    serde_json::from_str(&line).map_err(|e| format!("unexpected ollama chunk: {e}").into())
+fn main() {
+    lib::server::run();
 }

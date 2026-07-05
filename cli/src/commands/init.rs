@@ -7,50 +7,15 @@ const LOOP_TOML: &str = r#"name = "my-api"
 port = 3000
 "#;
 
-const MAIN_RS: &str = r#"use std::sync::Arc;
+const MAIN_RS: &str = r#"use lib::prelude::*;
 
-use http::Method;
-use lib::endpoint::engine::Engine;
-use lib::endpoint::{Access, Binding, Endpoint, Parameter, Signature};
-use lib::schema::{Primitive, Schema, Value};
+#[rest(post, "/add")]
+fn add(a: i64, b: i64) -> i64 {
+    a + b
+}
 
 fn main() {
-    let port: u16 = std::env::var("LOOP_PORT")
-        .ok()
-        .and_then(|port| port.parse().ok())
-        .unwrap_or(3000);
-
-    let add = Endpoint {
-        name: "add".into(),
-        signature: Signature {
-            params: vec![
-                Parameter {
-                    name: "a".into(),
-                    schema: Schema::Primitive(Primitive::I64),
-                },
-                Parameter {
-                    name: "b".into(),
-                    schema: Schema::Primitive(Primitive::I64),
-                },
-            ],
-            output: Schema::Primitive(Primitive::I64),
-        },
-        access: Access::Rest {
-            method: Method::POST,
-            url: "/add".into(),
-        },
-        binding: Binding::Native(Arc::new(|args: &[Value]| match args {
-            [Value::I64(a), Value::I64(b)] => Ok(Value::I64(a + b)),
-            _ => Err("expected two i64 arguments".into()),
-        })),
-    };
-
-    let engine = Engine::new(vec![add]).expect("invalid endpoint definitions");
-    println!("listening on http://127.0.0.1:{port}");
-    for route in lib::server::routes(&engine) {
-        println!("  {route}");
-    }
-    lib::server::serve_blocking(engine, ("127.0.0.1", port)).expect("server failed");
+    lib::server::run();
 }
 "#;
 
@@ -91,8 +56,7 @@ edition = "2024"
 [workspace]
 
 [dependencies]
-lib = {{ path = "{lib_path}", features = ["server"] }}
-http = "1"
+lib = {{ path = "{lib_path}", features = ["server", "macros"] }}
 "#,
         lib_path = lib_path.display()
     )

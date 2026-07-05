@@ -10,6 +10,8 @@ edition = "2024"
 # Schema/Endpoint definitions stay dependency-light.
 engine = ["dep:tokio"]
 server = ["engine", "dep:axum", "dep:serde_json", "dep:tokio-stream", "dep:base64"]
+# macros: the #[rest]/#[sse]/#[live] attributes + automatic registration
+macros = ["dep:loop-macros", "dep:inventory"]
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
@@ -21,6 +23,8 @@ axum = { version = "0.8.9", features = ["ws"], optional = true }
 serde_json = { version = "1", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 base64 = { version = "0.22", optional = true }
+loop-macros = { path = "../macros", optional = true }
+inventory = { version = "0.3", optional = true }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
