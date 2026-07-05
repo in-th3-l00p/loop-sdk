@@ -2,53 +2,53 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
-	Bool(bool),
-	I32(i32),
-	U32(u32),
-	I64(i64),
-	U64(u64),
-	F32(f32),
-	F64(f64),
-	Str(String),
-	Date(String),
-	Blob(Vec<u8>),
-	List(Vec<Value>),
-	Map(Vec<(Value, Value)>)
+    Bool(bool),
+    I32(i32),
+    U32(u32),
+    I64(i64),
+    U64(u64),
+    F32(f32),
+    F64(f64),
+    Str(String),
+    Date(String),
+    Blob(Vec<u8>),
+    List(Vec<Value>),
+    Map(Vec<(Value, Value)>),
 }
 
 impl Value {
-	pub fn kind(&self) -> &'static str {
-		match self {
-			Value::Bool(_) => "bool",
-			Value::I32(_) => "i32",
-			Value::U32(_) => "u32",
-			Value::I64(_) => "i64",
-			Value::U64(_) => "u64",
-			Value::F32(_) => "f32",
-			Value::F64(_) => "f64",
-			Value::Str(_) => "str",
-			Value::Date(_) => "date",
-			Value::Blob(_) => "blob",
-			Value::List(_) => "list",
-			Value::Map(_) => "map"
-		}
-	}
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Value::Bool(_) => "bool",
+            Value::I32(_) => "i32",
+            Value::U32(_) => "u32",
+            Value::I64(_) => "i64",
+            Value::U64(_) => "u64",
+            Value::F32(_) => "f32",
+            Value::F64(_) => "f64",
+            Value::Str(_) => "str",
+            Value::Date(_) => "date",
+            Value::Blob(_) => "blob",
+            Value::List(_) => "list",
+            Value::Map(_) => "map",
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-	use super::*;
+    use super::*;
 
-	#[test]
-	fn bson_roundtrips_nested_value() {
-		let value = Value::Map(vec![(
-			Value::Str("xs".into()),
-			Value::List(vec![Value::I64(1), Value::Blob(vec![0xde, 0xad])])
-		)]);
+    #[test]
+    fn bson_roundtrips_nested_value() {
+        let value = Value::Map(vec![(
+            Value::Str("xs".into()),
+            Value::List(vec![Value::I64(1), Value::Blob(vec![0xde, 0xad])]),
+        )]);
 
-		let bytes = bson::serialize_to_vec(&value).unwrap();
-		let back: Value = bson::deserialize_from_slice(&bytes).unwrap();
+        let bytes = bson::serialize_to_vec(&value).unwrap();
+        let back: Value = bson::deserialize_from_slice(&bytes).unwrap();
 
-		assert_eq!(value, back);
-	}
+        assert_eq!(value, back);
+    }
 }

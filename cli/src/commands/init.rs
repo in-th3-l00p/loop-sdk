@@ -104,36 +104,36 @@ pub extern "C" fn add(ptr: i32, len: i32) -> i64 {
 "#;
 
 pub fn run() {
-	if let Err(message) = scaffold() {
-		eprintln!("error: {message}");
-		std::process::exit(1);
-	}
+    if let Err(message) = scaffold() {
+        eprintln!("error: {message}");
+        std::process::exit(1);
+    }
 }
 
 fn scaffold() -> Result<(), String> {
-	if Path::new("loop.toml").exists() {
-		return Err("loop.toml already exists".to_string());
-	}
+    if Path::new("loop.toml").exists() {
+        return Err("loop.toml already exists".to_string());
+    }
 
-	write("loop.toml", MANIFEST)?;
-	fs::create_dir_all("handlers").map_err(|e| format!("handlers: {e}"))?;
-	fs::create_dir_all("handlers-src/src").map_err(|e| format!("handlers-src/src: {e}"))?;
-	write("handlers-src/Cargo.toml", GUEST_CARGO)?;
-	write("handlers-src/src/lib.rs", GUEST_LIB)?;
+    write("loop.toml", MANIFEST)?;
+    fs::create_dir_all("handlers").map_err(|e| format!("handlers: {e}"))?;
+    fs::create_dir_all("handlers-src/src").map_err(|e| format!("handlers-src/src: {e}"))?;
+    write("handlers-src/Cargo.toml", GUEST_CARGO)?;
+    write("handlers-src/src/lib.rs", GUEST_LIB)?;
 
-	println!("loop project initialized");
-	println!();
-	println!("build your handlers, then start the dev server:");
-	println!("  cd handlers-src");
-	println!("  cargo build --target wasm32-wasip1 --release");
-	println!("  cp target/wasm32-wasip1/release/handlers.wasm ../handlers/add.wasm");
-	println!("  cd .. && loop-cli dev");
-	Ok(())
+    println!("loop project initialized");
+    println!();
+    println!("build your handlers, then start the dev server:");
+    println!("  cd handlers-src");
+    println!("  cargo build --target wasm32-wasip1 --release");
+    println!("  cp target/wasm32-wasip1/release/handlers.wasm ../handlers/add.wasm");
+    println!("  cd .. && loop-cli dev");
+    Ok(())
 }
 
 fn write(path: &str, content: &str) -> Result<(), String> {
-	if Path::new(path).exists() {
-		return Err(format!("{path} already exists"));
-	}
-	fs::write(path, content).map_err(|e| format!("{path}: {e}"))
+    if Path::new(path).exists() {
+        return Err(format!("{path} already exists"));
+    }
+    fs::write(path, content).map_err(|e| format!("{path}: {e}"))
 }

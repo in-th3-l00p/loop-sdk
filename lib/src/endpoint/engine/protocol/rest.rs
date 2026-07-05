@@ -12,124 +12,163 @@ use super::super::{codec, request};
 use crate::endpoint::Access;
 
 pub fn mount(router: Router, endpoint: Arc<PreparedEndpoint>) -> Router {
-	let Access::Rest { method, url } = &endpoint.access else { unreachable!() };
-	let filter = MethodFilter::try_from(method.clone())
-		.unwrap_or_else(|_| panic!("unsupported HTTP method {method} on endpoint {:?}", endpoint.name));
-	let url = url.clone();
+    let Access::Rest { method, url } = &endpoint.access else {
+        unreachable!()
+    };
+    let filter = MethodFilter::try_from(method.clone()).unwrap_or_else(|_| {
+        panic!(
+            "unsupported HTTP method {method} on endpoint {:?}",
+            endpoint.name
+        )
+    });
+    let url = url.clone();
 
-	router.route(
-		&url,
-		on(filter, move |Path(path): Path<HashMap<String, String>>,
-		                 Query(query): Query<HashMap<String, String>>,
-		                 body: Option<Json<JsonValue>>| async move {
-			handle(&endpoint, path, query, body.map(|Json(b)| b)).await
-		})
-	)
+    router.route(
+        &url,
+        on(
+            filter,
+            move |Path(path): Path<HashMap<String, String>>,
+                  Query(query): Query<HashMap<String, String>>,
+                  body: Option<Json<JsonValue>>| async move {
+                handle(&endpoint, path, query, body.map(|Json(b)| b)).await
+            },
+        ),
+    )
 }
 
 async fn handle(
-	endpoint: &PreparedEndpoint,
-	path: HashMap<String, String>,
-	query: HashMap<String, String>,
-	body: Option<JsonValue>
+    endpoint: &PreparedEndpoint,
+    path: HashMap<String, String>,
+    query: HashMap<String, String>,
+    body: Option<JsonValue>,
 ) -> Result<Json<JsonValue>, EngineError> {
-	let args = request::collect_args(&endpoint.signature, &path, &query, body.as_ref())?;
-	let output = endpoint.executor.call(args).await.map_err(|e| EngineError::Handler(e.to_string()))?;
-	endpoint.signature.output.validate(&output).map_err(EngineError::Output)?;
-	Ok(Json(codec::json::encode(&output)))
+    let args = request::collect_args(&endpoint.signature, &path, &query, body.as_ref())?;
+    let output = endpoint
+        .executor
+        .call(args)
+        .await
+        .map_err(|e| EngineError::Handler(e.to_string()))?;
+    endpoint
+        .signature
+        .output
+        .validate(&output)
+        .map_err(EngineError::Output)?;
+    Ok(Json(codec::json::encode(&output)))
 }
 
 #[cfg(test)]
 mod tests {
-	use super::*;
-	use crate::endpoint::{Binding, Endpoint, Parameter, Signature};
-	use crate::schema::{Primitive, Schema, Value};
-	use axum::body::Body;
-	use axum::http::{Method, Request, StatusCode};
-	use http_body_util::BodyExt;
-	use serde_json::json;
-	use tower::ServiceExt;
+    use super::*;
+    use crate::endpoint::{Binding, Endpoint, Parameter, Signature};
+    use crate::schema::{Primitive, Schema, Value};
+    use axum::body::Body;
+    use axum::http::{Method, Request, StatusCode};
+    use http_body_util::BodyExt;
+    use serde_json::json;
+    use tower::ServiceExt;
 
-	fn add_router() -> Router {
-		let endpoint = Endpoint {
-			name: "add".into(),
-			signature: Signature {
-				params: vec![
-					Parameter { name: "a".into(), schema: Schema::Primitive(Primitive::I64) },
-					Parameter { name: "b".into(), schema: Schema::Primitive(Primitive::I64) },
-				],
-				output: Schema::Primitive(Primitive::I64)
-			},
-			access: Access::Rest { method: http::Method::POST, url: "/add".into() },
-			binding: Binding::Native(Arc::new(|args: &[Value]| match args {
-				[Value::I64(a), Value::I64(b)] => Ok(Value::I64(a + b)),
-				_ => Err("bad args".into())
-			}))
-		};
-		super::super::build_router(&super::super::super::registry::prepare(vec![endpoint]).unwrap())
-	}
+    fn add_router() -> Router {
+        let endpoint = Endpoint {
+            name: "add".into(),
+            signature: Signature {
+                params: vec![
+                    Parameter {
+                        name: "a".into(),
+                        schema: Schema::Primitive(Primitive::I64),
+                    },
+                    Parameter {
+                        name: "b".into(),
+                        schema: Schema::Primitive(Primitive::I64),
+                    },
+                ],
+                output: Schema::Primitive(Primitive::I64),
+            },
+            access: Access::Rest {
+                method: http::Method::POST,
+                url: "/add".into(),
+            },
+            binding: Binding::Native(Arc::new(|args: &[Value]| match args {
+                [Value::I64(a), Value::I64(b)] => Ok(Value::I64(a + b)),
+                _ => Err("bad args".into()),
+            })),
+        };
+        super::super::build_router(&super::super::super::registry::prepare(vec![endpoint]).unwrap())
+    }
 
-	async fn send(router: Router, request: Request<Body>) -> (StatusCode, JsonValue) {
-		let response = router.oneshot(request).await.unwrap();
-		let status = response.status();
-		let bytes = response.into_body().collect().await.unwrap().to_bytes();
-		(status, serde_json::from_slice(&bytes).unwrap())
-	}
+    async fn send(router: Router, request: Request<Body>) -> (StatusCode, JsonValue) {
+        let response = router.oneshot(request).await.unwrap();
+        let status = response.status();
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        (status, serde_json::from_slice(&bytes).unwrap())
+    }
 
-	fn post(uri: &str, body: JsonValue) -> Request<Body> {
-		Request::builder()
-			.method(Method::POST)
-			.uri(uri)
-			.header("content-type", "application/json")
-			.body(Body::from(body.to_string()))
-			.unwrap()
-	}
+    fn post(uri: &str, body: JsonValue) -> Request<Body> {
+        Request::builder()
+            .method(Method::POST)
+            .uri(uri)
+            .header("content-type", "application/json")
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
 
-	#[tokio::test]
-	async fn calls_endpoint_and_returns_json_output() {
-		let (status, body) = send(add_router(), post("/add", json!({"a": 2, "b": 3}))).await;
-		assert_eq!(status, StatusCode::OK);
-		assert_eq!(body, json!(5));
-	}
+    #[tokio::test]
+    async fn calls_endpoint_and_returns_json_output() {
+        let (status, body) = send(add_router(), post("/add", json!({"a": 2, "b": 3}))).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, json!(5));
+    }
 
-	#[tokio::test]
-	async fn returns_400_for_missing_parameter() {
-		let (status, body) = send(add_router(), post("/add", json!({"a": 2}))).await;
-		assert_eq!(status, StatusCode::BAD_REQUEST);
-		assert!(body["error"].as_str().unwrap().contains("b"));
-	}
+    #[tokio::test]
+    async fn returns_400_for_missing_parameter() {
+        let (status, body) = send(add_router(), post("/add", json!({"a": 2}))).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body["error"].as_str().unwrap().contains("b"));
+    }
 
-	#[tokio::test]
-	async fn returns_400_for_mistyped_parameter() {
-		let (status, _) = send(add_router(), post("/add", json!({"a": 2, "b": "x"}))).await;
-		assert_eq!(status, StatusCode::BAD_REQUEST);
-	}
+    #[tokio::test]
+    async fn returns_400_for_mistyped_parameter() {
+        let (status, _) = send(add_router(), post("/add", json!({"a": 2, "b": "x"}))).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
 
-	#[tokio::test]
-	async fn returns_500_for_handler_failure_and_supports_path_params() {
-		let endpoint = Endpoint {
-			name: "fail".into(),
-			signature: Signature {
-				params: vec![Parameter { name: "id".into(), schema: Schema::Primitive(Primitive::I64) }],
-				output: Schema::Primitive(Primitive::I64)
-			},
-			access: Access::Rest { method: http::Method::GET, url: "/things/{id}".into() },
-			binding: Binding::Native(Arc::new(|args: &[Value]| match args {
-				[Value::I64(7)] => Err("no seven".into()),
-				[Value::I64(n)] => Ok(Value::I64(*n)),
-				_ => unreachable!()
-			}))
-		};
-		let router =
-			super::super::build_router(&super::super::super::registry::prepare(vec![endpoint]).unwrap());
+    #[tokio::test]
+    async fn returns_500_for_handler_failure_and_supports_path_params() {
+        let endpoint = Endpoint {
+            name: "fail".into(),
+            signature: Signature {
+                params: vec![Parameter {
+                    name: "id".into(),
+                    schema: Schema::Primitive(Primitive::I64),
+                }],
+                output: Schema::Primitive(Primitive::I64),
+            },
+            access: Access::Rest {
+                method: http::Method::GET,
+                url: "/things/{id}".into(),
+            },
+            binding: Binding::Native(Arc::new(|args: &[Value]| match args {
+                [Value::I64(7)] => Err("no seven".into()),
+                [Value::I64(n)] => Ok(Value::I64(*n)),
+                _ => unreachable!(),
+            })),
+        };
+        let router = super::super::build_router(
+            &super::super::super::registry::prepare(vec![endpoint]).unwrap(),
+        );
 
-		let ok = Request::builder().uri("/things/3").body(Body::empty()).unwrap();
-		let (status, body) = send(router.clone(), ok).await;
-		assert_eq!((status, body), (StatusCode::OK, json!(3)));
+        let ok = Request::builder()
+            .uri("/things/3")
+            .body(Body::empty())
+            .unwrap();
+        let (status, body) = send(router.clone(), ok).await;
+        assert_eq!((status, body), (StatusCode::OK, json!(3)));
 
-		let boom = Request::builder().uri("/things/7").body(Body::empty()).unwrap();
-		let (status, body) = send(router, boom).await;
-		assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-		assert!(body["error"].as_str().unwrap().contains("no seven"));
-	}
+        let boom = Request::builder()
+            .uri("/things/7")
+            .body(Body::empty())
+            .unwrap();
+        let (status, body) = send(router, boom).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(body["error"].as_str().unwrap().contains("no seven"));
+    }
 }
