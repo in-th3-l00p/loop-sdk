@@ -1,21 +1,20 @@
-mod codec;
+pub(crate) mod abi;
 mod error;
 mod executor;
-pub mod project;
-mod protocol;
 mod registry;
-mod request;
 
 pub use error::EngineError;
+pub use registry::RegisteredEndpoint;
 
 use std::sync::Arc;
 
-use registry::PreparedEndpoint;
+use tokio::sync::mpsc;
 
-use super::{Access, Endpoint};
+use super::Endpoint;
+use crate::schema::Value;
 
 pub struct Engine {
-    endpoints: Vec<Arc<PreparedEndpoint>>,
+    endpoints: Vec<Arc<RegisteredEndpoint>>,
 }
 
 impl Engine {
@@ -25,28 +24,26 @@ impl Engine {
         })
     }
 
-    pub fn routes(&self) -> Vec<String> {
+    pub fn endpoints(&self) -> impl Iterator<Item = &Arc<RegisteredEndpoint>> {
+        self.endpoints.iter()
+    }
+
+    pub async fn call(&self, name: &str, args: Vec<Value>) -> Result<Value, EngineError> {
+        self.lookup(name)?.call(args).await
+    }
+
+    pub async fn stream(
+        &self,
+        name: &str,
+        args: Vec<Value>,
+    ) -> Result<mpsc::Receiver<Result<Value, EngineError>>, EngineError> {
+        self.lookup(name)?.stream(args).await
+    }
+
+    fn lookup(&self, name: &str) -> Result<&Arc<RegisteredEndpoint>, EngineError> {
         self.endpoints
             .iter()
-            .map(|e| match &e.access {
-                Access::Rest { method, url } => format!("{method} {url} ({})", e.name),
-                Access::Sse { url } => format!("SSE {url} ({})", e.name),
-                Access::Live { url } => format!("LIVE {url} ({})", e.name),
-            })
-            .collect()
-    }
-
-    pub fn router(&self) -> axum::Router {
-        protocol::build_router(&self.endpoints)
-    }
-
-    pub async fn serve(self, addr: impl tokio::net::ToSocketAddrs) -> Result<(), EngineError> {
-        let listener = tokio::net::TcpListener::bind(addr).await?;
-        axum::serve(listener, self.router()).await?;
-        Ok(())
-    }
-
-    pub fn serve_blocking(self, addr: impl tokio::net::ToSocketAddrs) -> Result<(), EngineError> {
-        tokio::runtime::Runtime::new()?.block_on(self.serve(addr))
+            .find(|e| e.name == name)
+            .ok_or_else(|| EngineError::Unknown(name.to_string()))
     }
 }

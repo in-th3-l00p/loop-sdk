@@ -1,9 +1,9 @@
-#![cfg(feature = "engine")]
+#![cfg(feature = "server")]
 
 use std::sync::Arc;
 
 use futures_util::StreamExt;
-use lib::endpoint::engine::{Engine, project};
+use lib::endpoint::engine::Engine;
 use lib::endpoint::{Access, Binding, Endpoint, HandlerError, Parameter, Signature, ValueStream};
 use lib::schema::{Primitive, Schema, Value};
 use serde_json::json;
@@ -15,8 +15,9 @@ fn i64_schema() -> Schema {
 async fn spawn(engine: Engine) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
+    let router = lib::server::router(&engine);
     tokio::spawn(async move {
-        axum::serve(listener, engine.router()).await.unwrap();
+        axum::serve(listener, router).await.unwrap();
     });
     format!("127.0.0.1:{}", addr.port())
 }
@@ -148,8 +149,8 @@ async fn live_endpoint_pushes_values_over_websocket() {
 }
 
 #[tokio::test]
-async fn project_manifest_serves_wasm_endpoint_end_to_end() {
-    // wasmtime's `wat` feature lets project wasm artifacts be WAT text
+async fn wasm_endpoint_serves_over_http() {
+    // wasmtime's `wat` feature lets Binding::Wasm bytes be WAT text
     let frame = {
         #[derive(serde::Serialize)]
         struct OkFrame {
@@ -161,44 +162,35 @@ async fn project_manifest_serves_wasm_endpoint_end_to_end() {
     let packed = (4096i64 << 32) | frame.len() as i64;
     let guest = format!(
         r#"(module
-			(memory (export "memory") 1)
-			(global $next (mut i32) (i32.const 8192))
-			(func (export "loop_alloc") (param i32) (result i32)
-				global.get $next
-				global.get $next
-				local.get 0
-				i32.add
-				global.set $next)
-			(func (export "answer") (param i32 i32) (result i64)
-				i64.const {packed})
-			(data (i32.const 4096) "{escaped}"))"#
+            (memory (export "memory") 1)
+            (global $next (mut i32) (i32.const 8192))
+            (func (export "loop_alloc") (param i32) (result i32)
+                global.get $next
+                global.get $next
+                local.get 0
+                i32.add
+                global.set $next)
+            (func (export "answer") (param i32 i32) (result i64)
+                i64.const {packed})
+            (data (i32.const 4096) "{escaped}"))"#
     );
 
-    let manifest = r#"
-name = "wasm-api"
-
-[[endpoint]]
-name = "answer"
-binding = { wasm = "handlers/answer.wasm", export = "answer" }
-
-[endpoint.access.Rest]
-method = "GET"
-url = "/answer"
-
-[endpoint.signature]
-params = []
-
-[endpoint.signature.output]
-Primitive = "I64"
-"#;
-
-    let dir = tempfile::tempdir().unwrap();
-    std::fs::write(dir.path().join("loop.toml"), manifest).unwrap();
-    std::fs::create_dir(dir.path().join("handlers")).unwrap();
-    std::fs::write(dir.path().join("handlers/answer.wasm"), guest).unwrap();
-
-    let endpoints = project::load(dir.path()).unwrap();
-    let addr = spawn(Engine::new(endpoints).unwrap()).await;
+    let answer = Endpoint {
+        name: "answer".into(),
+        signature: Signature {
+            params: vec![],
+            output: i64_schema(),
+        },
+        access: Access::Rest {
+            method: http::Method::GET,
+            url: "/answer".into(),
+        },
+        binding: Binding::Wasm {
+            bytes: guest.into_bytes(),
+            export: "answer".into(),
+        },
+    };
+    let addr = spawn(Engine::new(vec![answer]).unwrap()).await;
 
     let response = reqwest::get(format!("http://{addr}/answer")).await.unwrap();
     assert_eq!(response.status(), 200);

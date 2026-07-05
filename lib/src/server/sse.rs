@@ -10,12 +10,11 @@ use axum::routing::get;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 
-use super::super::error::EngineError;
-use super::super::registry::PreparedEndpoint;
-use super::super::{codec, request};
+use super::{json, request};
 use crate::endpoint::Access;
+use crate::endpoint::engine::{EngineError, RegisteredEndpoint};
 
-pub fn mount(router: Router, endpoint: Arc<PreparedEndpoint>) -> Router {
+pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
     let Access::Sse { url } = &endpoint.access else {
         unreachable!()
     };
@@ -33,28 +32,17 @@ pub fn mount(router: Router, endpoint: Arc<PreparedEndpoint>) -> Router {
 }
 
 async fn handle(
-    endpoint: Arc<PreparedEndpoint>,
+    endpoint: Arc<RegisteredEndpoint>,
     path: HashMap<String, String>,
     query: HashMap<String, String>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, EngineError> {
     let args = request::collect_args(&endpoint.signature, &path, &query, None)?;
-    let rx = endpoint
-        .executor
-        .stream(args)
-        .await
-        .map_err(|e| EngineError::Handler(e.to_string()))?;
+    let rx = endpoint.stream(args).await?;
 
-    let stream = ReceiverStream::new(rx).map(move |item| {
+    let stream = ReceiverStream::new(rx).map(|item| {
         let event = match item {
-            Ok(value) => match endpoint.signature.output.validate(&value) {
-                Ok(()) => Event::default().data(codec::json::encode(&value).to_string()),
-                Err(e) => Event::default()
-                    .event("error")
-                    .data(EngineError::Output(e).to_string()),
-            },
-            Err(e) => Event::default()
-                .event("error")
-                .data(EngineError::Handler(e.to_string()).to_string()),
+            Ok(value) => Event::default().data(json::encode(&value).to_string()),
+            Err(e) => Event::default().event("error").data(e.to_string()),
         };
         Ok(event)
     });

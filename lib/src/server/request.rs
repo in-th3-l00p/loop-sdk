@@ -4,9 +4,9 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use serde_json::Value as Json;
 
-use super::codec::{self, DecodeError};
-use super::error::EngineError;
+use super::json;
 use crate::endpoint::Signature;
+use crate::endpoint::engine::EngineError;
 use crate::schema::{Primitive, Schema, Value};
 
 pub fn collect_args(
@@ -21,17 +21,15 @@ pub fn collect_args(
         .map(|param| {
             let value = if let Some(raw) = path.get(&param.name) {
                 decode_scalar(&param.name, &param.schema, raw)?
-            } else if let Some(json) = body.and_then(|b| b.get(&param.name)) {
-                codec::json::decode(&param.schema, json).map_err(|e| {
-                    EngineError::Decode(DecodeError(format!("parameter {:?}: {e}", param.name)))
-                })?
+            } else if let Some(value) = body.and_then(|b| b.get(&param.name)) {
+                json::decode(&param.schema, value)
+                    .map_err(|e| EngineError::Decode(format!("parameter {:?}: {e}", param.name)))?
             } else if let Some(raw) = query.get(&param.name) {
                 decode_scalar(&param.name, &param.schema, raw)?
             } else {
                 return Err(EngineError::MissingParam(param.name.clone()));
             };
 
-            param.schema.validate(&value).map_err(EngineError::Input)?;
             Ok(value)
         })
         .collect()
@@ -39,9 +37,9 @@ pub fn collect_args(
 
 fn decode_scalar(name: &str, schema: &Schema, raw: &str) -> Result<Value, EngineError> {
     let error = |expected: &str| {
-        EngineError::Decode(DecodeError(format!(
+        EngineError::Decode(format!(
             "parameter {name:?}: expected {expected}, found {raw:?}"
-        )))
+        ))
     };
 
     let Schema::Primitive(primitive) = schema else {

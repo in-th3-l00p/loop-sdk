@@ -7,13 +7,12 @@ use axum::extract::{Path, Query};
 use axum::response::Response;
 use axum::routing::get;
 
-use super::super::error::EngineError;
-use super::super::registry::PreparedEndpoint;
-use super::super::{codec, request};
+use super::{json, request};
 use crate::endpoint::Access;
+use crate::endpoint::engine::{EngineError, RegisteredEndpoint};
 use crate::schema::Value;
 
-pub fn mount(router: Router, endpoint: Arc<PreparedEndpoint>) -> Router {
+pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
     let Access::Live { url } = &endpoint.access else {
         unreachable!()
     };
@@ -32,7 +31,7 @@ pub fn mount(router: Router, endpoint: Arc<PreparedEndpoint>) -> Router {
 }
 
 async fn handle(
-    endpoint: Arc<PreparedEndpoint>,
+    endpoint: Arc<RegisteredEndpoint>,
     ws: WebSocketUpgrade,
     path: HashMap<String, String>,
     query: HashMap<String, String>,
@@ -41,24 +40,19 @@ async fn handle(
     Ok(ws.on_upgrade(move |socket| push(endpoint, socket, args)))
 }
 
-async fn push(endpoint: Arc<PreparedEndpoint>, mut socket: WebSocket, args: Vec<Value>) {
-    let mut rx = match endpoint.executor.stream(args).await {
+async fn push(endpoint: Arc<RegisteredEndpoint>, mut socket: WebSocket, args: Vec<Value>) {
+    let mut rx = match endpoint.stream(args).await {
         Ok(rx) => rx,
         Err(e) => {
-            let _ = socket
-                .send(error_frame(&EngineError::Handler(e.to_string())))
-                .await;
+            let _ = socket.send(error_frame(&e)).await;
             return;
         }
     };
 
     while let Some(item) = rx.recv().await {
         let message = match item {
-            Ok(value) => match endpoint.signature.output.validate(&value) {
-                Ok(()) => Message::Text(codec::json::encode(&value).to_string().into()),
-                Err(e) => error_frame(&EngineError::Output(e)),
-            },
-            Err(e) => error_frame(&EngineError::Handler(e.to_string())),
+            Ok(value) => Message::Text(json::encode(&value).to_string().into()),
+            Err(e) => error_frame(&e),
         };
         if socket.send(message).await.is_err() {
             break;

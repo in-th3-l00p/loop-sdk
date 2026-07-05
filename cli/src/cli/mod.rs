@@ -21,4 +21,9 @@ pub enum Commands {
         #[arg(long, default_value = ".")]
         dir: String,
     },
+    /// Compile the loop project into a standalone server binary
+    Build {
+        #[arg(long, default_value = ".")]
+        dir: String,
+    },
 }

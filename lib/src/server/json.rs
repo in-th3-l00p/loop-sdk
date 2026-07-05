@@ -2,10 +2,9 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use serde_json::{Map as JsonMap, Number, Value as Json};
 
-use super::DecodeError;
 use crate::schema::{Primitive, Schema, Value};
 
-pub fn decode(schema: &Schema, json: &Json) -> Result<Value, DecodeError> {
+pub fn decode(schema: &Schema, json: &Json) -> Result<Value, String> {
     match schema {
         Schema::Primitive(primitive) => decode_primitive(primitive, json),
         Schema::List(item) => {
@@ -15,9 +14,7 @@ pub fn decode(schema: &Schema, json: &Json) -> Result<Value, DecodeError> {
             items
                 .iter()
                 .enumerate()
-                .map(|(i, item_json)| {
-                    decode(item, item_json).map_err(|e| DecodeError(format!("item {i}: {e}")))
-                })
+                .map(|(i, item_json)| decode(item, item_json).map_err(|e| format!("item {i}: {e}")))
                 .collect::<Result<Vec<_>, _>>()
                 .map(Value::List)
         }
@@ -25,7 +22,7 @@ pub fn decode(schema: &Schema, json: &Json) -> Result<Value, DecodeError> {
     }
 }
 
-fn decode_primitive(primitive: &Primitive, json: &Json) -> Result<Value, DecodeError> {
+fn decode_primitive(primitive: &Primitive, json: &Json) -> Result<Value, String> {
     match primitive {
         Primitive::Bool => json
             .as_bool()
@@ -70,12 +67,12 @@ fn decode_primitive(primitive: &Primitive, json: &Json) -> Result<Value, DecodeE
             BASE64
                 .decode(s)
                 .map(Value::Blob)
-                .map_err(|e| DecodeError(format!("invalid base64 blob: {e}")))
+                .map_err(|e| format!("invalid base64 blob: {e}"))
         }
     }
 }
 
-fn decode_map(key: &Schema, value: &Schema, json: &Json) -> Result<Value, DecodeError> {
+fn decode_map(key: &Schema, value: &Schema, json: &Json) -> Result<Value, String> {
     if matches!(key, Schema::Primitive(Primitive::Str)) {
         let Json::Object(object) = json else {
             return Err(mismatch("object", json));
@@ -83,8 +80,7 @@ fn decode_map(key: &Schema, value: &Schema, json: &Json) -> Result<Value, Decode
         object
             .iter()
             .map(|(k, v)| {
-                let decoded =
-                    decode(value, v).map_err(|e| DecodeError(format!("key {k:?}: {e}")))?;
+                let decoded = decode(value, v).map_err(|e| format!("key {k:?}: {e}"))?;
                 Ok((Value::Str(k.clone()), decoded))
             })
             .collect::<Result<Vec<_>, _>>()
@@ -98,18 +94,14 @@ fn decode_map(key: &Schema, value: &Schema, json: &Json) -> Result<Value, Decode
             .enumerate()
             .map(|(i, entry)| {
                 let Json::Array(pair) = entry else {
-                    return Err(DecodeError(format!(
-                        "entry {i}: expected [key, value] pair"
-                    )));
+                    return Err(format!("entry {i}: expected [key, value] pair"));
                 };
                 let [k, v] = pair.as_slice() else {
-                    return Err(DecodeError(format!(
-                        "entry {i}: expected exactly 2 elements"
-                    )));
+                    return Err(format!("entry {i}: expected exactly 2 elements"));
                 };
                 Ok((
-                    decode(key, k).map_err(|e| DecodeError(format!("entry {i} key: {e}")))?,
-                    decode(value, v).map_err(|e| DecodeError(format!("entry {i} value: {e}")))?,
+                    decode(key, k).map_err(|e| format!("entry {i} key: {e}"))?,
+                    decode(value, v).map_err(|e| format!("entry {i} value: {e}"))?,
                 ))
             })
             .collect::<Result<Vec<_>, _>>()
@@ -151,8 +143,8 @@ pub fn encode(value: &Value) -> Json {
     }
 }
 
-fn mismatch(expected: &str, found: &Json) -> DecodeError {
-    DecodeError(format!("expected {expected}, found {found}"))
+fn mismatch(expected: &str, found: &Json) -> String {
+    format!("expected {expected}, found {found}")
 }
 
 #[cfg(test)]
@@ -235,6 +227,6 @@ mod tests {
     fn decode_error_reports_path_context() {
         let schema = Schema::List(Box::new(Schema::Primitive(Primitive::I64)));
         let err = decode(&schema, &json!([1, "bad"])).unwrap_err();
-        assert!(err.0.contains("item 1"), "unexpected message: {}", err.0);
+        assert!(err.contains("item 1"), "unexpected message: {}", err);
     }
 }

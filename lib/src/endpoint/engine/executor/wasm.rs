@@ -4,7 +4,7 @@ use wasmtime::{Instance, InstancePre, Linker, Module, Store};
 use wasmtime_wasi::WasiCtxBuilder;
 use wasmtime_wasi::p1::WasiP1Ctx;
 
-use super::super::codec;
+use super::super::abi;
 use crate::endpoint::HandlerError;
 use crate::schema::Value;
 
@@ -81,7 +81,7 @@ impl WasmHandler {
     }
 
     fn call_blocking(&self, args: &[Value]) -> Result<Value, HandlerError> {
-        let input = codec::bson::encode_args(args)?;
+        let input = abi::encode_args(args)?;
 
         let mut store = store(&self.engine);
         let instance = instantiate(&self.instance_pre, &mut store)?;
@@ -101,7 +101,7 @@ impl WasmHandler {
 
         let mut output = vec![0u8; out_len];
         memory.read(&store, out_ptr, &mut output)?;
-        codec::bson::decode_result(&output)
+        abi::decode_result(&output)
     }
 }
 

@@ -1,18 +1,84 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use tokio::sync::mpsc;
+
 use super::error::EngineError;
 use super::executor::{Executor, WasmHandler};
 use crate::endpoint::{Access, Binding, Endpoint, Signature};
+use crate::schema::Value;
 
-pub struct PreparedEndpoint {
+pub struct RegisteredEndpoint {
     pub name: String,
     pub signature: Signature,
     pub access: Access,
-    pub executor: Executor,
+    executor: Executor,
 }
 
-pub fn prepare(endpoints: Vec<Endpoint>) -> Result<Vec<Arc<PreparedEndpoint>>, EngineError> {
+impl RegisteredEndpoint {
+    pub async fn call(&self, args: Vec<Value>) -> Result<Value, EngineError> {
+        self.validate_args(&args)?;
+        let output = self
+            .executor
+            .call(args)
+            .await
+            .map_err(|e| EngineError::Handler(e.to_string()))?;
+        self.signature
+            .output
+            .validate(&output)
+            .map_err(EngineError::Output)?;
+        Ok(output)
+    }
+
+    pub async fn stream(
+        self: &Arc<Self>,
+        args: Vec<Value>,
+    ) -> Result<mpsc::Receiver<Result<Value, EngineError>>, EngineError> {
+        self.validate_args(&args)?;
+        let mut source = self
+            .executor
+            .stream(args)
+            .await
+            .map_err(|e| EngineError::Handler(e.to_string()))?;
+
+        let endpoint = self.clone();
+        let (tx, rx) = mpsc::channel(16);
+        tokio::spawn(async move {
+            while let Some(item) = source.recv().await {
+                let item = match item {
+                    Ok(value) => endpoint
+                        .signature
+                        .output
+                        .validate(&value)
+                        .map(|()| value)
+                        .map_err(EngineError::Output),
+                    Err(e) => Err(EngineError::Handler(e.to_string())),
+                };
+                if tx.send(item).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+
+    fn validate_args(&self, args: &[Value]) -> Result<(), EngineError> {
+        if args.len() != self.signature.params.len() {
+            return Err(EngineError::Decode(format!(
+                "expected {} arguments, got {}",
+                self.signature.params.len(),
+                args.len()
+            )));
+        }
+        for (param, arg) in self.signature.params.iter().zip(args) {
+            param.schema.validate(arg).map_err(EngineError::Input)?;
+        }
+        Ok(())
+    }
+}
+
+pub fn prepare(endpoints: Vec<Endpoint>) -> Result<Vec<Arc<RegisteredEndpoint>>, EngineError> {
     let mut routes = HashSet::new();
     let mut prepared = Vec::with_capacity(endpoints.len());
 
@@ -54,7 +120,7 @@ pub fn prepare(endpoints: Vec<Endpoint>) -> Result<Vec<Arc<PreparedEndpoint>>, E
             }
         };
 
-        prepared.push(Arc::new(PreparedEndpoint {
+        prepared.push(Arc::new(RegisteredEndpoint {
             name: endpoint.name,
             signature: endpoint.signature,
             access: endpoint.access,
@@ -68,7 +134,7 @@ pub fn prepare(endpoints: Vec<Endpoint>) -> Result<Vec<Arc<PreparedEndpoint>>, E
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::schema::{Primitive, Schema, Value};
+    use crate::schema::{Primitive, Schema};
     use http::Method;
 
     fn rest(name: &str, url: &str) -> Endpoint {
@@ -162,6 +228,40 @@ mod tests {
         assert!(matches!(
             prepare(vec![endpoint]),
             Err(EngineError::Conflict(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn call_validates_inputs_and_outputs() {
+        let endpoints = prepare(vec![Endpoint {
+            name: "id".into(),
+            signature: Signature {
+                params: vec![crate::endpoint::Parameter {
+                    name: "n".into(),
+                    schema: Schema::Primitive(Primitive::I64),
+                }],
+                output: Schema::Primitive(Primitive::I64),
+            },
+            access: Access::Rest {
+                method: Method::POST,
+                url: "/id".into(),
+            },
+            binding: Binding::Native(Arc::new(|args: &[Value]| Ok(args[0].clone()))),
+        }])
+        .unwrap();
+        let endpoint = &endpoints[0];
+
+        assert_eq!(
+            endpoint.call(vec![Value::I64(7)]).await.unwrap(),
+            Value::I64(7)
+        );
+        assert!(matches!(
+            endpoint.call(vec![Value::Bool(true)]).await,
+            Err(EngineError::Input(_))
+        ));
+        assert!(matches!(
+            endpoint.call(vec![]).await,
+            Err(EngineError::Decode(_))
         ));
     }
 }

@@ -6,12 +6,11 @@ use axum::routing::{MethodFilter, on};
 use axum::{Json, Router};
 use serde_json::Value as JsonValue;
 
-use super::super::error::EngineError;
-use super::super::registry::PreparedEndpoint;
-use super::super::{codec, request};
+use super::{json, request};
 use crate::endpoint::Access;
+use crate::endpoint::engine::{EngineError, RegisteredEndpoint};
 
-pub fn mount(router: Router, endpoint: Arc<PreparedEndpoint>) -> Router {
+pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
     let Access::Rest { method, url } = &endpoint.access else {
         unreachable!()
     };
@@ -37,28 +36,20 @@ pub fn mount(router: Router, endpoint: Arc<PreparedEndpoint>) -> Router {
 }
 
 async fn handle(
-    endpoint: &PreparedEndpoint,
+    endpoint: &RegisteredEndpoint,
     path: HashMap<String, String>,
     query: HashMap<String, String>,
     body: Option<JsonValue>,
 ) -> Result<Json<JsonValue>, EngineError> {
     let args = request::collect_args(&endpoint.signature, &path, &query, body.as_ref())?;
-    let output = endpoint
-        .executor
-        .call(args)
-        .await
-        .map_err(|e| EngineError::Handler(e.to_string()))?;
-    endpoint
-        .signature
-        .output
-        .validate(&output)
-        .map_err(EngineError::Output)?;
-    Ok(Json(codec::json::encode(&output)))
+    let output = endpoint.call(args).await?;
+    Ok(Json(json::encode(&output)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::endpoint::engine::Engine;
     use crate::endpoint::{Binding, Endpoint, Parameter, Signature};
     use crate::schema::{Primitive, Schema, Value};
     use axum::body::Body;
@@ -92,7 +83,7 @@ mod tests {
                 _ => Err("bad args".into()),
             })),
         };
-        super::super::build_router(&super::super::super::registry::prepare(vec![endpoint]).unwrap())
+        crate::server::router(&Engine::new(vec![endpoint]).unwrap())
     }
 
     async fn send(router: Router, request: Request<Body>) -> (StatusCode, JsonValue) {
@@ -152,9 +143,7 @@ mod tests {
                 _ => unreachable!(),
             })),
         };
-        let router = super::super::build_router(
-            &super::super::super::registry::prepare(vec![endpoint]).unwrap(),
-        );
+        let router = crate::server::router(&Engine::new(vec![endpoint]).unwrap());
 
         let ok = Request::builder()
             .uri("/things/3")
