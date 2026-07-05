@@ -6,3 +6,5 @@ edition = "2024"
 [dependencies]
 lib = { path = "../../lib", features = ["server"] }
 http = "1"
+
+[workspace]

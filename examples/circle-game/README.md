@@ -5,7 +5,7 @@ Moves arrive over REST; every connected client watches the board through a
 `Live` (WebSocket) endpoint pushing ~20 state frames per second.
 
 ```sh
-cargo run -p circle-game
+loop dev
 ```
 
 Then open `examples/circle-game/index.html` in a browser (two windows for two

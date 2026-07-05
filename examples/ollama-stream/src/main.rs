@@ -19,12 +19,17 @@ struct Chunk {
 }
 
 fn main() {
+    let port: u16 = std::env::var("LOOP_PORT")
+        .ok()
+        .and_then(|port| port.parse().ok())
+        .unwrap_or(3000);
+
     let engine = Engine::new(vec![generate_endpoint()]).expect("invalid endpoint definitions");
-    println!("ollama streaming demo listening on http://127.0.0.1:3000");
+    println!("ollama streaming demo listening on http://127.0.0.1:{port}");
     for route in lib::server::routes(&engine) {
         println!("  {route}");
     }
-    lib::server::serve_blocking(engine, ("127.0.0.1", 3000)).expect("server failed");
+    lib::server::serve_blocking(engine, ("127.0.0.1", port)).expect("server failed");
 }
 
 // SSE /generate?prompt=... -> one event per generated token

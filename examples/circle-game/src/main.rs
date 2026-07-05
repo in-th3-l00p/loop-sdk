@@ -22,6 +22,11 @@ struct Board {
 type SharedBoard = Arc<Mutex<Board>>;
 
 fn main() {
+    let port: u16 = std::env::var("LOOP_PORT")
+        .ok()
+        .and_then(|port| port.parse().ok())
+        .unwrap_or(3000);
+
     let board = SharedBoard::new(Mutex::new(Board {
         players: [(80.0, 80.0), (320.0, 320.0)],
     }));
@@ -29,12 +34,12 @@ fn main() {
     let endpoints = vec![move_endpoint(board.clone()), watch_endpoint(board)];
 
     let engine = Engine::new(endpoints).expect("invalid endpoint definitions");
-    println!("circle game listening on http://127.0.0.1:3000");
+    println!("circle game listening on http://127.0.0.1:{port}");
     for route in lib::server::routes(&engine) {
         println!("  {route}");
     }
     println!("open examples/circle-game/index.html in a browser to play");
-    lib::server::serve_blocking(engine, ("127.0.0.1", 3000)).expect("server failed");
+    lib::server::serve_blocking(engine, ("127.0.0.1", port)).expect("server failed");
 }
 
 // GET /move/{player}?dx=..&dy=.. -> true (GET keeps browser fetch preflight-free)

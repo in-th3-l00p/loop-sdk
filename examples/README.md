@@ -1,8 +1,8 @@
 # examples
 
-Three projects showcasing the loop SDK's initial feature set. Each is a
-workspace member — run with `cargo run -p <name>` from the repo root (they all
-bind port 3000, so run one at a time).
+Three loop projects showcasing the SDK's initial feature set. Each is a
+standalone project managed by the loop CLI — `cd` into one and run `loop dev`
+(they all bind port 3000, so run one at a time).
 
 | Example                              | Showcases                                                          |
 | ------------------------------------ | ------------------------------------------------------------------ |

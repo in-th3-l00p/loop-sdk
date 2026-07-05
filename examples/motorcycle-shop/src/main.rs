@@ -26,6 +26,11 @@ struct Shop {
 type SharedShop = Arc<Mutex<Shop>>;
 
 fn main() {
+    let port: u16 = std::env::var("LOOP_PORT")
+        .ok()
+        .and_then(|port| port.parse().ok())
+        .unwrap_or(3000);
+
     let shop = SharedShop::default();
 
     let endpoints = vec![
@@ -37,11 +42,11 @@ fn main() {
     ];
 
     let engine = Engine::new(endpoints).expect("invalid endpoint definitions");
-    println!("motorcycle shop listening on http://127.0.0.1:3000");
+    println!("motorcycle shop listening on http://127.0.0.1:{port}");
     for route in lib::server::routes(&engine) {
         println!("  {route}");
     }
-    lib::server::serve_blocking(engine, ("127.0.0.1", 3000)).expect("server failed");
+    lib::server::serve_blocking(engine, ("127.0.0.1", port)).expect("server failed");
 }
 
 // POST /motorcycles {brand, model, year, price} -> id

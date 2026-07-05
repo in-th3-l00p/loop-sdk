@@ -1,0 +1,4 @@
+name = "ollama-stream"
+
+[dev]
+port = 3000

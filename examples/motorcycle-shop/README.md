@@ -4,7 +4,7 @@ A complete REST CRUD API built on the loop SDK: five natively-bound endpoints
 sharing one in-memory inventory.
 
 ```sh
-cargo run -p motorcycle-shop
+loop dev
 ```
 
 ```sh

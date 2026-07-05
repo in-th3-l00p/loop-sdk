@@ -8,7 +8,7 @@ Requires ollama running on `localhost:11434` with the `qwen3.5:9b` model
 pulled (edit `MODEL` in `src/main.rs` to use another).
 
 ```sh
-cargo run -p ollama-stream
+loop dev
 ```
 
 ```sh
