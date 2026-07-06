@@ -1,3 +1,5 @@
+#[cfg(feature = "database")]
+pub mod database;
 pub mod endpoint;
 pub mod schema;
 #[cfg(feature = "server")]

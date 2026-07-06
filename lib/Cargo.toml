@@ -12,6 +12,11 @@ engine = ["dep:tokio"]
 server = ["engine", "dep:axum", "dep:serde_json", "dep:tokio-stream", "dep:base64"]
 # macros: the #[rest]/#[sse]/#[live] attributes + automatic registration
 macros = ["dep:loop-macros", "dep:inventory"]
+# database: sqlx-backed storage with schema-guided queries and migrations.
+# Enable at least one driver (db-sqlite / db-postgres).
+database = ["engine", "dep:sqlx"]
+db-sqlite = ["database", "sqlx/sqlite"]
+db-postgres = ["database", "sqlx/postgres"]
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
@@ -26,6 +31,7 @@ tokio-stream = { version = "0.1", optional = true }
 base64 = { version = "0.22", optional = true }
 loop-macros = { path = "../macros", optional = true }
 inventory = { version = "0.3", optional = true }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio"], optional = true }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

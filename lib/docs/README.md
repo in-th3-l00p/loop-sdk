@@ -43,6 +43,7 @@ The default build is definitions-only (schemas + endpoint declarations); everyth
 | `engine`  | `endpoint::engine` — registers endpoints and executes them  | tokio    |
 | `server`  | `server` — HTTP/SSE/WebSocket layer on top of the engine    | axum     |
 | `macros`  | `#[rest]`/`#[sse]`/`#[live]` + auto-registration + `server::run` | loop-macros, inventory |
+| `database` | `database` — migrations + schema-guided queries; needs a driver: `db-sqlite` / `db-postgres` | sqlx |
 
 ## `schema`
 
@@ -69,6 +70,30 @@ The shared serving layer: `router(&Engine)`, `routes(&Engine)`, `serve`, `serve_
 
 - `protocol/` — one adapter per `Access` variant (rest, sse, live).
 - `wire/` — `json` (schema-guided Value↔JSON codec; no enum tags on the wire) and `request` (path > body > query parameter mapping).
+
+## `database` (features `db-sqlite` / `db-postgres`)
+
+sqlx behind loop's own types: handlers call `database::query(...)` and never
+see sqlx. Queries use `?` placeholders and a portable SQL vocabulary
+(`BIGSERIAL` auto-increment keys, `BLOB`, `TIMESTAMP` — stored as ISO-8601
+text); `Dialect` renders both per backend, translating `?` to `$n` for
+postgres. Rows decode through `FromValue`, so `SELECT`s can return any
+`#[derive(Schema)]` struct, scalars, or `Option<T>` for nullable columns.
+
+```rust
+let note: Option<Note> = database::query("SELECT id, body, tag FROM notes WHERE id = ?")
+    .bind(id)
+    .fetch_optional()?;
+```
+
+`Migration`s (portable DDL, applied in version order, recorded with checksums
+in `_loop_migrations`) run at startup: `server::run` connects when
+`LOOP_DB_URL` is set — `loop dev` derives it from the `[database]` section of
+`loop.toml`, defaulting to a project-named sqlite file — and applies every
+inventory-registered migration set. The driver is inferred from the URL
+(`postgres://...` vs anything else = sqlite). The `fetch_*`/`execute` methods
+are blocking (handlers run on blocking threads); `*_async` twins exist for
+async contexts.
 
 ## Loop projects
 

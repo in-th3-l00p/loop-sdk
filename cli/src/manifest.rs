@@ -11,11 +11,33 @@ pub struct Manifest {
     pub name: String,
     #[serde(default)]
     pub dev: Dev,
+    pub database: Option<Database>,
 }
 
 #[derive(Deserialize, Default)]
 pub struct Dev {
     pub port: Option<u16>,
+}
+
+#[derive(Deserialize)]
+pub struct Database {
+    pub url: Option<String>,
+}
+
+impl Manifest {
+    /// The connection URL `loop dev` exports as `LOOP_DB_URL`. Only projects
+    /// with a `[database]` section get one; a shell-level `LOOP_DB_URL`
+    /// overrides the manifest, and the fallback is a project-named sqlite
+    /// file, so `[database]` alone is enough for local dev.
+    pub fn database_url(&self) -> Option<String> {
+        let database = self.database.as_ref()?;
+        Some(
+            std::env::var("LOOP_DB_URL")
+                .ok()
+                .or_else(|| database.url.clone())
+                .unwrap_or_else(|| format!("sqlite:{}.db", self.name)),
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -74,5 +96,36 @@ mod tests {
     fn fails_for_missing_manifest() {
         let dir = tempfile::tempdir().unwrap();
         assert!(matches!(parse(dir.path()), Err(ManifestError::Io(_, _))));
+    }
+
+    #[test]
+    fn database_url_needs_a_database_section() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("loop.toml"), "name = \"my-api\"\n").unwrap();
+        assert_eq!(parse(dir.path()).unwrap().database_url(), None);
+    }
+
+    #[test]
+    fn database_url_defaults_to_a_project_named_sqlite_file() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("loop.toml"), "name = \"my-api\"\n\n[database]\n").unwrap();
+        assert_eq!(
+            parse(dir.path()).unwrap().database_url(),
+            Some("sqlite:my-api.db".into())
+        );
+    }
+
+    #[test]
+    fn database_url_comes_from_the_manifest_when_set() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("loop.toml"),
+            "name = \"my-api\"\n\n[database]\nurl = \"postgres://localhost/shop\"\n",
+        )
+        .unwrap();
+        assert_eq!(
+            parse(dir.path()).unwrap().database_url(),
+            Some("postgres://localhost/shop".into())
+        );
     }
 }

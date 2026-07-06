@@ -14,10 +14,15 @@ fn dev(dir: &str, port: Option<u16>) -> Result<(), String> {
     let port = port.or(manifest.dev.port).unwrap_or(3000);
 
     println!("starting dev server for {:?} on port {port}", manifest.name);
-    let status = Command::new("cargo")
+    let mut command = Command::new("cargo");
+    command
         .arg("run")
         .current_dir(dir)
-        .env("LOOP_PORT", port.to_string())
+        .env("LOOP_PORT", port.to_string());
+    if let Some(url) = manifest.database_url() {
+        command.env("LOOP_DB_URL", url);
+    }
+    let status = command
         .status()
         .map_err(|e| format!("failed to run cargo: {e}"))?;
 

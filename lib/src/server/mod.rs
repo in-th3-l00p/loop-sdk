@@ -22,11 +22,29 @@ pub fn run() {
         }
     };
 
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    #[cfg(feature = "database")]
+    match runtime.block_on(crate::database::init_from_env()) {
+        Ok(Some(db)) => println!("database connected ({:?})", db.dialect()),
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+
     println!("listening on http://{addr}:{port}");
     for route in routes(&engine) {
         println!("  {route}");
     }
-    if let Err(e) = serve_blocking(engine, (addr, port)) {
+    if let Err(e) = runtime.block_on(serve(engine, (addr, port))) {
         eprintln!("error: {e}");
         std::process::exit(1);
     }
