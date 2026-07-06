@@ -5,13 +5,20 @@ use crate::schema::{Primitive, Schema};
 pub(crate) fn validate(schema: &Schema, value: &Value) -> Result<(), ValidationError> {
     match schema {
         Schema::Primitive(primitive) => validate_primitive(primitive, value),
+        Schema::Optional(inner) => match value {
+            Value::Null => Ok(()),
+            present => validate(inner, present),
+        },
         Schema::List(item_schema) => validate_list(item_schema, value),
         Schema::Map(key_schema, value_schema) => validate_map(key_schema, value_schema, value),
         Schema::Record(fields) => validate_record(fields, value),
         Schema::Constrained(inner, constraints) => {
             validate(inner, value)?;
-            for constraint in constraints {
-                constraint.check(value)?;
+            // constraints describe present values; an absent optional passes
+            if !matches!(value, Value::Null) {
+                for constraint in constraints {
+                    constraint.check(value)?;
+                }
             }
             Ok(())
         }
@@ -337,6 +344,39 @@ mod tests {
             validate(&schema, &Value::Str("x".into())).unwrap_err(),
             ValidationError::TypeMismatch { .. }
         ));
+    }
+
+    #[test]
+    fn optional_schema_accepts_null_and_matching_inner() {
+        let schema = Schema::Optional(Box::new(Schema::Primitive(Primitive::I64)));
+        assert!(validate(&schema, &Value::Null).is_ok());
+        assert!(validate(&schema, &Value::I64(1)).is_ok());
+        assert!(matches!(
+            validate(&schema, &Value::Str("x".into())).unwrap_err(),
+            ValidationError::TypeMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn null_rejects_non_optional_schemas() {
+        assert!(validate(&Schema::Primitive(Primitive::I64), &Value::Null).is_err());
+    }
+
+    #[test]
+    fn constraints_skip_null_but_check_present_optionals() {
+        let schema = Schema::Constrained(
+            Box::new(Schema::Optional(Box::new(Schema::Primitive(
+                Primitive::U32,
+            )))),
+            vec![crate::schema::Constraint::Min(18.0)],
+        );
+
+        assert!(validate(&schema, &Value::Null).is_ok());
+        assert!(validate(&schema, &Value::U32(21)).is_ok());
+        assert_eq!(
+            validate(&schema, &Value::U32(3)).unwrap_err(),
+            ValidationError::Constraint("must be at least 18".into())
+        );
     }
 
     #[test]

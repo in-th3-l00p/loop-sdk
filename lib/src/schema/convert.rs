@@ -111,6 +111,30 @@ impl FromValue for Date {
     }
 }
 
+impl<T: AsSchema> AsSchema for Option<T> {
+    fn schema() -> Schema {
+        Schema::Optional(Box::new(T::schema()))
+    }
+}
+
+impl<T: IntoValue> IntoValue for Option<T> {
+    fn into_value(self) -> Value {
+        match self {
+            Some(inner) => inner.into_value(),
+            None => Value::Null,
+        }
+    }
+}
+
+impl<T: FromValue> FromValue for Option<T> {
+    fn from_value(value: Value) -> Result<Self, HandlerError> {
+        match value {
+            Value::Null => Ok(None),
+            present => T::from_value(present).map(Some),
+        }
+    }
+}
+
 impl<T: AsSchema> AsSchema for Vec<T> {
     fn schema() -> Schema {
         Schema::List(Box::new(T::schema()))
@@ -208,5 +232,32 @@ mod tests {
     fn rejects_mismatched_values() {
         assert!(i64::from_value(Value::Str("nope".into())).is_err());
         assert!(Vec::<i64>::from_value(Value::I64(1)).is_err());
+    }
+
+    #[test]
+    fn options_infer_optional_schemas() {
+        assert_eq!(
+            Option::<String>::schema(),
+            Schema::Optional(Box::new(Schema::Primitive(Primitive::Str)))
+        );
+        assert_eq!(
+            Vec::<Option<i64>>::schema(),
+            Schema::List(Box::new(Schema::Optional(Box::new(Schema::Primitive(
+                Primitive::I64
+            )))))
+        );
+    }
+
+    #[test]
+    fn roundtrips_options_through_null_and_present_values() {
+        assert_eq!(Some(7i64).into_value(), Value::I64(7));
+        assert_eq!(None::<i64>.into_value(), Value::Null);
+        assert_eq!(Option::<i64>::from_value(Value::I64(7)).unwrap(), Some(7));
+        assert_eq!(Option::<i64>::from_value(Value::Null).unwrap(), None);
+    }
+
+    #[test]
+    fn present_options_still_typecheck_their_inner_value() {
+        assert!(Option::<i64>::from_value(Value::Str("nope".into())).is_err());
     }
 }

@@ -7,6 +7,13 @@ use crate::schema::{Primitive, Schema, Value};
 pub fn decode(schema: &Schema, json: &Json) -> Result<Value, String> {
     match schema {
         Schema::Primitive(primitive) => decode_primitive(primitive, json),
+        Schema::Optional(inner) => {
+            if json.is_null() {
+                Ok(Value::Null)
+            } else {
+                decode(inner, json)
+            }
+        }
         Schema::List(item) => {
             let Json::Array(items) = json else {
                 return Err(mismatch("array", json));
@@ -39,8 +46,13 @@ fn decode_record(fields: &[(String, Schema)], json: &Json) -> Result<Value, Stri
     fields
         .iter()
         .map(|(name, schema)| {
-            let field = object.get(name).ok_or(format!("missing field {name:?}"))?;
-            let decoded = decode(schema, field).map_err(|e| format!("field {name:?}: {e}"))?;
+            let decoded = match object.get(name) {
+                Some(field) => {
+                    decode(schema, field).map_err(|e| format!("field {name:?}: {e}"))?
+                }
+                None if schema.accepts_null() => Value::Null,
+                None => return Err(format!("missing field {name:?}")),
+            };
             Ok((Value::Str(name.clone()), decoded))
         })
         .collect::<Result<Vec<_>, String>>()
@@ -121,6 +133,7 @@ fn decode_map(key: &Schema, value: &Schema, json: &Json) -> Result<Value, String
 
 pub fn encode(value: &Value) -> Json {
     match value {
+        Value::Null => Json::Null,
         Value::Bool(b) => Json::Bool(*b),
         Value::I32(n) => Json::Number((*n).into()),
         Value::U32(n) => Json::Number((*n).into()),
@@ -280,6 +293,53 @@ mod tests {
             decode(&person_schema(), &json!([1]))
                 .unwrap_err()
                 .contains("expected object")
+        );
+    }
+
+    fn optional_str() -> Schema {
+        Schema::Optional(Box::new(Schema::Primitive(Primitive::Str)))
+    }
+
+    #[test]
+    fn optional_schemas_decode_null_and_present_values() {
+        assert_eq!(decode(&optional_str(), &json!(null)).unwrap(), Value::Null);
+        assert_eq!(
+            decode(&optional_str(), &json!("hi")).unwrap(),
+            Value::Str("hi".into())
+        );
+        assert!(decode(&optional_str(), &json!(5)).is_err());
+    }
+
+    #[test]
+    fn optional_record_fields_may_be_omitted_or_null() {
+        let schema = Schema::Record(vec![
+            ("name".into(), Schema::Primitive(Primitive::Str)),
+            ("nickname".into(), optional_str()),
+        ]);
+
+        for body in [json!({"name": "ada"}), json!({"name": "ada", "nickname": null})] {
+            assert_eq!(
+                decode(&schema, &body).unwrap(),
+                Value::Map(vec![
+                    (Value::Str("name".into()), Value::Str("ada".into())),
+                    (Value::Str("nickname".into()), Value::Null),
+                ])
+            );
+        }
+
+        assert!(
+            decode(&schema, &json!({"nickname": "lovelace"}))
+                .unwrap_err()
+                .contains("missing field \"name\"")
+        );
+    }
+
+    #[test]
+    fn null_encodes_to_json_null() {
+        assert_eq!(encode(&Value::Null), json!(null));
+        assert_eq!(
+            decode(&optional_str(), &encode(&Value::Null)).unwrap(),
+            Value::Null
         );
     }
 

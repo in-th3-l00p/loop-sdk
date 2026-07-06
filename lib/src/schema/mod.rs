@@ -41,6 +41,7 @@ impl Primitive {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Schema {
     Primitive(Primitive),
+    Optional(Box<Schema>),
     List(Box<Schema>),
     Map(Box<Schema>, Box<Schema>),
     Record(Vec<(String, Schema)>),
@@ -53,5 +54,11 @@ impl Schema {
             Schema::Constrained(inner, _) => inner.base(),
             other => other,
         }
+    }
+
+    /// Whether `Value::Null` satisfies this schema (i.e. it is optional,
+    /// possibly under constraints).
+    pub fn accepts_null(&self) -> bool {
+        matches!(self.base(), Schema::Optional(_))
     }
 }

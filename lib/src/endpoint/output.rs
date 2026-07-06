@@ -27,6 +27,13 @@ macro_rules! infallible_outputs {
 
 infallible_outputs!(bool, i32, u32, i64, u64, f32, f64, String, Blob, Date);
 
+impl<T: IntoValue> IntoHandlerOutput for Option<T> {
+    type Ok = Option<T>;
+    fn into_handler_output(self) -> Result<Value, HandlerError> {
+        Ok(self.into_value())
+    }
+}
+
 impl<T: IntoValue> IntoHandlerOutput for Vec<T> {
     type Ok = Vec<T>;
     fn into_handler_output(self) -> Result<Value, HandlerError> {
@@ -93,6 +100,12 @@ mod tests {
                 .into_handler_output()
                 .is_err()
         );
+    }
+
+    #[test]
+    fn options_become_null_or_present_outputs() {
+        assert_eq!(Some(42i64).into_handler_output().unwrap(), Value::I64(42));
+        assert_eq!(None::<i64>.into_handler_output().unwrap(), Value::Null);
     }
 
     #[test]

@@ -33,6 +33,8 @@ pub fn collect_args(
                     .map_err(|e| EngineError::Decode(format!("parameter {:?}: {e}", param.name)))?
             } else if let Some(raw) = query.get(&param.name) {
                 decode_scalar(&param.name, &param.schema, raw)?
+            } else if param.schema.accepts_null() {
+                Value::Null
             } else {
                 return Err(EngineError::MissingParam(param.name.clone()));
             };
@@ -60,7 +62,12 @@ fn decode_scalar(name: &str, schema: &Schema, raw: &str) -> Result<Value, Engine
         ))
     };
 
-    let Schema::Primitive(primitive) = schema.base() else {
+    // a present optional parameter parses as its inner type
+    let mut base = schema.base();
+    while let Schema::Optional(inner) = base {
+        base = inner.base();
+    }
+    let Schema::Primitive(primitive) = base else {
         return Err(error(
             "a primitive (path/query parameters cannot be lists, maps or records)",
         ));
@@ -197,6 +204,39 @@ mod tests {
 
         let args = collect_args(&signature, &HashMap::new(), &HashMap::new(), Some(&body)).unwrap();
         assert_eq!(args.len(), 2);
+    }
+
+    #[test]
+    fn absent_optional_parameters_resolve_to_null() {
+        let signature = signature(vec![
+            ("a", Schema::Primitive(Primitive::I64)),
+            (
+                "b",
+                Schema::Optional(Box::new(Schema::Primitive(Primitive::I64))),
+            ),
+        ]);
+        let query = HashMap::from([("a".to_string(), "1".to_string())]);
+
+        let args = collect_args(&signature, &HashMap::new(), &query, None).unwrap();
+        assert_eq!(args, vec![Value::I64(1), Value::Null]);
+    }
+
+    #[test]
+    fn present_optional_parameters_decode_as_their_inner_type() {
+        let signature = signature(vec![(
+            "b",
+            Schema::Optional(Box::new(Schema::Primitive(Primitive::I64))),
+        )]);
+        let query = HashMap::from([("b".to_string(), "5".to_string())]);
+
+        let args = collect_args(&signature, &HashMap::new(), &query, None).unwrap();
+        assert_eq!(args, vec![Value::I64(5)]);
+
+        let bad = HashMap::from([("b".to_string(), "x".to_string())]);
+        assert!(matches!(
+            collect_args(&signature, &HashMap::new(), &bad, None),
+            Err(EngineError::Decode(_))
+        ));
     }
 
     #[test]

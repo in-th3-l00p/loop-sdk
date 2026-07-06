@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Value {
+    Null,
     Bool(bool),
     I32(i32),
     U32(u32),
@@ -19,6 +20,7 @@ pub enum Value {
 impl Value {
     pub fn kind(&self) -> &'static str {
         match self {
+            Value::Null => "null",
             Value::Bool(_) => "bool",
             Value::I32(_) => "i32",
             Value::U32(_) => "u32",
@@ -43,7 +45,7 @@ mod tests {
     fn bson_roundtrips_nested_value() {
         let value = Value::Map(vec![(
             Value::Str("xs".into()),
-            Value::List(vec![Value::I64(1), Value::Blob(vec![0xde, 0xad])]),
+            Value::List(vec![Value::I64(1), Value::Blob(vec![0xde, 0xad]), Value::Null]),
         )]);
 
         let bytes = bson::serialize_to_vec(&value).unwrap();
