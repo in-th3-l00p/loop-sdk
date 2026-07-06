@@ -31,7 +31,7 @@ fn main() {
 }
 ```
 
-Schemas are inferred from the function signature (`bool`, ints, floats, `String`, `Blob`, `Date`, `Vec<T>`, `BTreeMap`/`HashMap<K, V>`, and any `#[derive(Schema)]` struct). REST handlers return `T` or `Result<T, HandlerError>`; streaming (`sse`/`live`) handlers return `Result<impl Iterator<Item = T>, HandlerError>`. The manual `Endpoint { .. }` API underneath stays public.
+Schemas are inferred from the function signature (`bool`, ints, floats, `String`, `Blob`, `Date`, `Option<T>`, `Vec<T>`, `BTreeMap`/`HashMap<K, V>`, and any `#[derive(Schema)]` struct). `Option<T>` marks a parameter or field optional: it may be omitted or `null` on the wire, and `#[check]` constraints apply only when a value is present. REST handlers return `T`, `Option<T>`, or `Result<T, HandlerError>`; streaming (`sse`/`live`) handlers return `Result<impl Iterator<Item = T>, HandlerError>`. The manual `Endpoint { .. }` API underneath stays public.
 
 `#[check(...)]` on parameters and derived fields attaches declarative constraints, validated by the engine on inputs and outputs: `min`/`max` (numeric bounds), `min_len`/`max_len` (str/list/blob/map length), `pattern` (regex on str), `one_of(a, b, ...)`. When a REST endpoint has exactly one record parameter, the whole request body is that record; other parameters resolve from path and query.
 
@@ -47,7 +47,7 @@ The default build is definitions-only (schemas + endpoint declarations); everyth
 ## `schema`
 
 - `Primitive` — leaf types: `Bool, I32, U32, I64, U64, F32, F64, Str, Date, Blob` (`.kind()` gives the display name).
-- `Schema` — recursive descriptor: `Primitive | List(Box<Schema>) | Map(Box<Schema>, Box<Schema>) | Record(Vec<(String, Schema)>) | Constrained(Box<Schema>, Vec<Constraint>)`; `save`/`load` persist as BSON; `.base()` unwraps constraints.
+- `Schema` — recursive descriptor: `Primitive | Optional(Box<Schema>) | List(Box<Schema>) | Map(Box<Schema>, Box<Schema>) | Record(Vec<(String, Schema)>) | Constrained(Box<Schema>, Vec<Constraint>)`; `save`/`load` persist as BSON; `.base()` unwraps constraints; `.accepts_null()` reports optionality.
 - `Constraint` — declarative refinements: `Min/Max`, `MinLen/MaxLen`, `Pattern`, `OneOf`.
 - `Value` — a runtime instance; records are string-keyed maps. `Schema::validate(&Value)` checks shape and constraints with path-aware `ValidationError`s (`field "year": must be at least 1885`).
 - `convert` — `AsSchema`/`IntoValue`/`FromValue` bridge Rust types to schemas and values; `#[derive(Schema)]` implements them for structs.

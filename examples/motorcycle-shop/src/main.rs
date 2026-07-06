@@ -13,6 +13,8 @@ struct Motorcycle {
     year: u32,
     #[check(min = 0.0)]
     price: f64,
+    #[check(min_len = 1)]
+    nickname: Option<String>,
 }
 
 #[derive(Schema)]

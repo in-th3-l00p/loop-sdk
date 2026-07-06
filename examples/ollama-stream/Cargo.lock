@@ -595,6 +595,7 @@ dependencies = [
  "http-serde",
  "inventory",
  "loop-macros",
+ "regex-lite",
  "serde",
  "serde_json",
  "tokio",
@@ -789,6 +790,12 @@ checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
 ]
+
+[[package]]
+name = "regex-lite"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
 
 [[package]]
 name = "ring"
