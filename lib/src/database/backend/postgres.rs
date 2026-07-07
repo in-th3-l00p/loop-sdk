@@ -1,13 +1,68 @@
-use sqlx::Row as _;
-use sqlx::postgres::{PgArguments, PgPool, PgRow};
+use sqlx::{Executor as _, Row as _};
+use sqlx::postgres::{PgArguments, PgPool, PgPoolOptions, PgRow};
 
-use super::{out_of_range, primitive_of, unsupported_bind, unsupported_column};
+use super::{
+    Backend, BoxFuture, Column, column_out_of_range, decode_failed, decode_row, out_of_range,
+    primitive_of, unsupported_bind, unsupported_column,
+};
 use crate::database::error::DatabaseError;
+use crate::database::sql::Dialect;
 use crate::schema::{Primitive, Schema, Value};
 
 type Query<'q> = sqlx::query::Query<'q, sqlx::Postgres, PgArguments>;
 
-pub async fn fetch(
+pub(super) struct PostgresBackend {
+    pool: PgPool,
+}
+
+impl PostgresBackend {
+    pub(super) async fn connect(url: &str) -> Result<PostgresBackend, DatabaseError> {
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(url)
+            .await
+            .map_err(DatabaseError::Connect)?;
+        Ok(PostgresBackend { pool })
+    }
+}
+
+impl Backend for PostgresBackend {
+    fn dialect(&self) -> Dialect {
+        Dialect::Postgres
+    }
+
+    fn fetch<'a>(
+        &'a self,
+        sql: &'a str,
+        args: &'a [(Value, Schema)],
+        target: &'a Schema,
+    ) -> BoxFuture<'a, Result<Vec<Value>, DatabaseError>> {
+        Box::pin(fetch(&self.pool, sql, args, target))
+    }
+
+    fn execute<'a>(
+        &'a self,
+        sql: &'a str,
+        args: &'a [(Value, Schema)],
+    ) -> BoxFuture<'a, Result<u64, DatabaseError>> {
+        Box::pin(execute(&self.pool, sql, args))
+    }
+
+    fn raw<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<(), DatabaseError>> {
+        Box::pin(raw(&self.pool, sql))
+    }
+
+    fn migrate_step<'a>(
+        &'a self,
+        migration_sql: &'a str,
+        record_sql: &'a str,
+        record_args: &'a [(Value, Schema)],
+    ) -> BoxFuture<'a, Result<(), DatabaseError>> {
+        Box::pin(migrate_step(&self.pool, migration_sql, record_sql, record_args))
+    }
+}
+
+async fn fetch(
     pool: &PgPool,
     sql: &str,
     args: &[(Value, Schema)],
@@ -17,10 +72,12 @@ pub async fn fetch(
         .fetch_all(pool)
         .await
         .map_err(DatabaseError::Query)?;
-    rows.iter().map(|row| decode_row(row, target)).collect()
+    rows.iter()
+        .map(|row| decode_row(row, target, decode_column))
+        .collect()
 }
 
-pub async fn execute(
+async fn execute(
     pool: &PgPool,
     sql: &str,
     args: &[(Value, Schema)],
@@ -32,7 +89,7 @@ pub async fn execute(
     Ok(result.rows_affected())
 }
 
-pub async fn raw(pool: &PgPool, sql: &str) -> Result<(), DatabaseError> {
+async fn raw(pool: &PgPool, sql: &str) -> Result<(), DatabaseError> {
     sqlx::raw_sql(sql)
         .execute(pool)
         .await
@@ -40,15 +97,15 @@ pub async fn raw(pool: &PgPool, sql: &str) -> Result<(), DatabaseError> {
     Ok(())
 }
 
-pub async fn migrate_step(
+async fn migrate_step(
     pool: &PgPool,
     migration_sql: &str,
     record_sql: &str,
     record_args: &[(Value, Schema)],
 ) -> Result<(), DatabaseError> {
     let mut tx = pool.begin().await.map_err(DatabaseError::Query)?;
-    sqlx::raw_sql(migration_sql)
-        .execute(&mut *tx)
+    (&mut *tx)
+        .execute(migration_sql)
         .await
         .map_err(DatabaseError::Query)?;
     bind_all(sqlx::query(record_sql), record_args)?
@@ -92,61 +149,51 @@ fn bind_all<'q>(
     Ok(query)
 }
 
-fn decode_row(row: &PgRow, target: &Schema) -> Result<Value, DatabaseError> {
-    match target.base() {
-        Schema::Record(fields) => fields
-            .iter()
-            .map(|(name, schema)| {
-                let value = decode_column(row, name.as_str(), schema)?;
-                Ok((Value::Str(name.clone()), value))
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map(Value::Map),
-        _ => decode_column(row, 0, target),
-    }
-}
-
-fn decode_column<I>(row: &PgRow, index: I, schema: &Schema) -> Result<Value, DatabaseError>
-where
-    I: sqlx::ColumnIndex<PgRow> + std::fmt::Display + Copy,
-{
+fn decode_column(
+    row: &PgRow,
+    column: Column<'_>,
+    schema: &Schema,
+) -> Result<Value, DatabaseError> {
     let Some(primitive) = primitive_of(schema) else {
         return Err(unsupported_column(schema));
     };
-    let decode_error = |e: sqlx::Error| DatabaseError::Decode(format!("column {index}: {e}"));
 
     macro_rules! get {
         ($ty:ty) => {
-            row.try_get::<Option<$ty>, _>(index).map_err(decode_error)
+            match column {
+                Column::Index(index) => row.try_get::<Option<$ty>, _>(index),
+                Column::Name(name) => row.try_get::<Option<$ty>, _>(name),
+            }
+            .map_err(|e| decode_failed(column, e))
         };
     }
 
-    let wide = |n: i64, primitive: &Primitive| -> Result<Value, DatabaseError> {
+    let narrow = |n: i64| -> Result<Value, DatabaseError> {
         Ok(match primitive {
-            Primitive::I32 => Value::I32(
-                i32::try_from(n).map_err(|_| out_of_range(&format!("column {index}")))?,
-            ),
-            Primitive::U32 => Value::U32(
-                u32::try_from(n).map_err(|_| out_of_range(&format!("column {index}")))?,
-            ),
-            Primitive::U64 => Value::U64(
-                u64::try_from(n).map_err(|_| out_of_range(&format!("column {index}")))?,
-            ),
+            Primitive::I32 => {
+                Value::I32(i32::try_from(n).map_err(|_| column_out_of_range(column))?)
+            }
+            Primitive::U32 => {
+                Value::U32(u32::try_from(n).map_err(|_| column_out_of_range(column))?)
+            }
+            Primitive::U64 => {
+                Value::U64(u64::try_from(n).map_err(|_| column_out_of_range(column))?)
+            }
             _ => Value::I64(n),
         })
     };
 
-    let integer = |primitive: &Primitive| -> Result<Option<Value>, DatabaseError> {
+    let integer = || -> Result<Option<Value>, DatabaseError> {
         let n = match get!(i64) {
             Ok(n) => n,
             Err(_) => get!(i32)?.map(i64::from),
         };
-        n.map(|n| wide(n, primitive)).transpose()
+        n.map(narrow).transpose()
     };
 
     let value = match primitive {
         Primitive::Bool => get!(bool)?.map(Value::Bool),
-        Primitive::I32 | Primitive::U32 | Primitive::I64 | Primitive::U64 => integer(primitive)?,
+        Primitive::I32 | Primitive::U32 | Primitive::I64 | Primitive::U64 => integer()?,
         Primitive::F32 => match get!(f32) {
             Ok(n) => n.map(Value::F32),
             Err(_) => get!(f64)?.map(|n| Value::F32(n as f32)),

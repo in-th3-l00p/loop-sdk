@@ -179,6 +179,43 @@ async fn later_migrations_apply_on_top() {
 }
 
 #[tokio::test]
+async fn multi_statement_migrations_apply_atomically() {
+    let db = fresh().await;
+    let split = Migration::new(
+        2,
+        "split_tables",
+        "CREATE TABLE tags (id BIGSERIAL PRIMARY KEY, label TEXT NOT NULL);
+         CREATE TABLE user_tags (user_id BIGINT NOT NULL, tag_id BIGINT NOT NULL);",
+    );
+    assert_eq!(db.migrate(&[create_users(), split]).await.unwrap(), 1);
+
+    db.query("INSERT INTO tags (label) VALUES (?)")
+        .bind("admin".to_string())
+        .execute_async()
+        .await
+        .unwrap();
+    let count: i64 = db
+        .query("SELECT count(*) FROM user_tags")
+        .fetch_one_async()
+        .await
+        .unwrap();
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
+async fn failed_migrations_are_not_recorded() {
+    let db = fresh().await;
+    let broken = Migration::new(2, "broken", "CREATE TABLE broken (id NOT A TYPE!!)");
+    assert!(matches!(
+        db.migrate(&[create_users(), broken]).await,
+        Err(DatabaseError::Migration { .. })
+    ));
+
+    let fixed = Migration::new(2, "fixed", "CREATE TABLE fixed (id BIGINT)");
+    assert_eq!(db.migrate(&[create_users(), fixed]).await.unwrap(), 1);
+}
+
+#[tokio::test]
 async fn blocking_api_works_from_handler_threads() {
     let db = fresh().await;
     seed(&db).await;

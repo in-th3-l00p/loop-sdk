@@ -3,9 +3,9 @@ compile_error!(
     "the `database` feature needs a driver: enable `db-sqlite` and/or `db-postgres`"
 );
 
+mod backend;
 mod config;
 mod connection;
-mod driver;
 mod error;
 mod global;
 mod migration;
@@ -15,6 +15,7 @@ mod sql;
 #[cfg(all(test, feature = "db-sqlite"))]
 mod tests;
 
+pub use backend::{Backend, BoxFuture};
 pub use config::{Config, Driver};
 pub use connection::Database;
 pub use error::DatabaseError;

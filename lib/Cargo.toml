@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+default = ["server", "database", "macros", "db-sqlite"]
 # engine: registers endpoints and manages how they execute (validation +
 # native dispatch). server: shared HTTP/SSE/WebSocket serving layer on top of
 # the engine. Both kept out of the default build so consumers who only need
