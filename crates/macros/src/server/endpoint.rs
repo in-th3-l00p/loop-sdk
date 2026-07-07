@@ -56,6 +56,37 @@ enum Kind {
     Stream,
 }
 
+/// `User` (or `Option<User>`) parameters come from the request context, not
+/// the wire: they are resolved via `FromContext` and never appear in the
+/// endpoint's schema. Detection is by type name, so `User` is a reserved
+/// parameter type name in endpoint signatures.
+fn is_context_param(ty: &Type) -> bool {
+    fn last_segment_is_user(ty: &Type) -> bool {
+        let Type::Path(path) = ty else { return false };
+        path.path
+            .segments
+            .last()
+            .is_some_and(|segment| segment.ident == "User")
+    }
+
+    if last_segment_is_user(ty) {
+        return true;
+    }
+    // one level of Option<User>
+    let Type::Path(path) = ty else { return false };
+    let Some(segment) = path.path.segments.last() else {
+        return false;
+    };
+    if segment.ident != "Option" {
+        return false;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return false;
+    };
+    matches!(args.args.first(), Some(syn::GenericArgument::Type(inner))
+        if args.args.len() == 1 && last_segment_is_user(inner))
+}
+
 fn expand(mut function: ItemFn, access: TokenStream, kind: Kind) -> Result<TokenStream> {
     let name = function.sig.ident.clone();
     let name_str = name.to_string();
@@ -63,7 +94,11 @@ fn expand(mut function: ItemFn, access: TokenStream, kind: Kind) -> Result<Token
 
     let mut arg_names = Vec::new();
     let mut arg_types: Vec<Type> = Vec::new();
-    let mut arg_schemas = Vec::new();
+    let mut wire_names = Vec::new();
+    let mut wire_types: Vec<Type> = Vec::new();
+    let mut wire_schemas = Vec::new();
+    let mut ctx_names = Vec::new();
+    let mut ctx_types: Vec<Type> = Vec::new();
     for input in function.sig.inputs.iter_mut() {
         let FnArg::Typed(arg) = input else {
             return Err(Error::new_spanned(
@@ -78,12 +113,26 @@ fn expand(mut function: ItemFn, access: TokenStream, kind: Kind) -> Result<Token
             ));
         };
         let ty = arg.ty.as_ref().clone();
-        let constraints = check::extract(&mut arg.attrs, &ty)?;
-        arg_schemas.push(check::schema(&ty, &constraints));
+        if is_context_param(&ty) {
+            if arg.attrs.iter().any(|attr| attr.path().is_ident("check")) {
+                return Err(Error::new_spanned(
+                    &arg.attrs[0],
+                    "context parameters like `User` come from the session, \
+                     not the wire — #[check] does not apply",
+                ));
+            }
+            ctx_names.push(pat.ident.clone());
+            ctx_types.push(ty.clone());
+        } else {
+            let constraints = check::extract(&mut arg.attrs, &ty)?;
+            wire_schemas.push(check::schema(&ty, &constraints));
+            wire_names.push(pat.ident.clone());
+            wire_types.push(ty.clone());
+        }
         arg_names.push(pat.ident.clone());
         arg_types.push(ty);
     }
-    let arg_labels: Vec<String> = arg_names.iter().map(Ident::to_string).collect();
+    let wire_labels: Vec<String> = wire_names.iter().map(Ident::to_string).collect();
 
     let (output_trait, output_schema, invoke) = match kind {
         Kind::Call => (
@@ -121,8 +170,8 @@ fn expand(mut function: ItemFn, access: TokenStream, kind: Kind) -> Result<Token
                 signature: ::lib::server::endpoint::Signature {
                     params: vec![
                         #(::lib::server::endpoint::Parameter {
-                            name: #arg_labels.into(),
-                            schema: #arg_schemas,
+                            name: #wire_labels.into(),
+                            schema: #wire_schemas,
                         },)*
                     ],
                     output: __output_schema(&#name),
@@ -132,15 +181,21 @@ fn expand(mut function: ItemFn, access: TokenStream, kind: Kind) -> Result<Token
                     |__ctx: &::lib::server::endpoint::Context,
                      __args: &[::lib::schema::Value]| {
                         let _ = __ctx;
-                        let [#(#arg_names),*] = __args else {
+                        let [#(#wire_names),*] = __args else {
                             return ::std::result::Result::Err(
                                 "wrong number of arguments".into(),
                             );
                         };
                         #(
-                            let #arg_names = <#arg_types as ::lib::schema::FromValue>::from_value(
-                                #arg_names.clone(),
+                            let #wire_names = <#wire_types as ::lib::schema::FromValue>::from_value(
+                                #wire_names.clone(),
                             )?;
+                        )*
+                        #(
+                            let #ctx_names =
+                                <#ctx_types as ::lib::server::endpoint::FromContext>::from_context(
+                                    __ctx,
+                                )?;
                         )*
                         #invoke
                     },

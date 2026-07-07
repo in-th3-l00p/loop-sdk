@@ -48,6 +48,14 @@ pub trait FromContext: Sized {
     fn from_context(ctx: &Context) -> Result<Self, HandlerError>;
 }
 
+/// Optional context parameters swallow resolution failures: an absent or
+/// invalid credential yields `None` instead of a 401.
+impl<T: FromContext> FromContext for Option<T> {
+    fn from_context(ctx: &Context) -> Result<Self, HandlerError> {
+        Ok(T::from_context(ctx).ok())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

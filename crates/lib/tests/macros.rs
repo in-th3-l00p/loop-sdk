@@ -61,6 +61,37 @@ fn join(
     format!("{} joined {team} at level {level}", person.name)
 }
 
+/// A stand-in for lib::auth::User: context-param detection is by type name,
+/// so this exercises the whole FromContext path without the auth feature.
+struct User {
+    name: String,
+}
+
+impl lib::server::endpoint::FromContext for User {
+    fn from_context(ctx: &lib::server::endpoint::Context) -> Result<Self, HandlerError> {
+        match ctx.token() {
+            Some("sesame") => Ok(User { name: "ada".into() }),
+            _ => Err(with_status(
+                StatusCode::UNAUTHORIZED,
+                "authentication required",
+            )),
+        }
+    }
+}
+
+#[rest(get, "/whoami")]
+fn whoami(user: User) -> String {
+    user.name
+}
+
+#[rest(get, "/hello")]
+fn hello(greeting: String, viewer: Option<User>) -> String {
+    match viewer {
+        Some(user) => format!("{greeting} {}", user.name),
+        None => format!("{greeting} guest"),
+    }
+}
+
 async fn spawn() -> String {
     let engine = Engine::new(lib::server::endpoint::registered()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -241,6 +272,87 @@ async fn record_params_take_the_whole_body_and_validate_constraints() {
         .await
         .unwrap();
     assert_eq!(unknown.status(), 400);
+}
+
+#[test]
+fn context_params_never_appear_in_the_endpoint_schema() {
+    let endpoints = lib::server::endpoint::registered();
+    let whoami = endpoints.iter().find(|e| e.name == "whoami").unwrap();
+    assert!(whoami.signature.params.is_empty());
+
+    let hello = endpoints.iter().find(|e| e.name == "hello").unwrap();
+    let params: Vec<&str> = hello
+        .signature
+        .params
+        .iter()
+        .map(|p| p.name.as_str())
+        .collect();
+    assert_eq!(params, ["greeting"]);
+}
+
+#[tokio::test]
+async fn user_params_guard_endpoints_with_401() {
+    let addr = spawn().await;
+    let client = reqwest::Client::new();
+
+    let anonymous = client
+        .get(format!("http://{addr}/whoami"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anonymous.status(), 401);
+
+    let wrong = client
+        .get(format!("http://{addr}/whoami"))
+        .bearer_auth("wrong")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(wrong.status(), 401);
+
+    let ok = client
+        .get(format!("http://{addr}/whoami"))
+        .bearer_auth("sesame")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), 200);
+    assert_eq!(ok.json::<serde_json::Value>().await.unwrap(), json!("ada"));
+
+    // ?token= works where headers cannot be set (EventSource/WebSocket)
+    let via_query = client
+        .get(format!("http://{addr}/whoami?token=sesame"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(via_query.status(), 200);
+}
+
+#[tokio::test]
+async fn optional_user_params_mix_with_wire_params() {
+    let addr = spawn().await;
+    let client = reqwest::Client::new();
+
+    let guest = client
+        .get(format!("http://{addr}/hello?greeting=hi"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        guest.json::<serde_json::Value>().await.unwrap(),
+        json!("hi guest")
+    );
+
+    let known = client
+        .get(format!("http://{addr}/hello?greeting=hi"))
+        .bearer_auth("sesame")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        known.json::<serde_json::Value>().await.unwrap(),
+        json!("hi ada")
+    );
 }
 
 #[tokio::test]
