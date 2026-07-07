@@ -77,7 +77,7 @@ fn delete(id: i64) -> Result<bool, HandlerError> {
 }
 
 fn not_found(id: i64) -> HandlerError {
-    format!("no todo with id {id}").into()
+    with_status(StatusCode::NOT_FOUND, format!("no todo with id {id}"))
 }
 
 fn main() {

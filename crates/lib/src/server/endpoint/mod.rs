@@ -3,8 +3,8 @@ mod binding;
 pub mod engine;
 mod output;
 
-pub use binding::{Binding, Handler, HandlerError, Source, ValueStream};
-pub use http::Method;
+pub use binding::{Binding, Handler, HandlerError, Source, ValueStream, status_of, with_status};
+pub use http::{Method, StatusCode};
 pub use output::{IntoHandlerOutput, StreamOutput};
 use serde::{Deserialize, Serialize};
 

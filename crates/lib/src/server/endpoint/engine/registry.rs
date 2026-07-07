@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use super::error::EngineError;
 use super::executor::Executor;
-use crate::server::endpoint::{Access, Binding, Endpoint, Signature};
+use crate::server::endpoint::{Access, Binding, Endpoint, Signature, status_of};
 use crate::schema::Value;
 
 pub struct RegisteredEndpoint {
@@ -22,7 +22,10 @@ impl RegisteredEndpoint {
             .executor
             .call(args)
             .await
-            .map_err(|e| EngineError::Handler(e.to_string()))?;
+            .map_err(|e| EngineError::Handler {
+                status: status_of(&e),
+                message: e.to_string(),
+            })?;
         self.signature
             .output
             .validate(&output)
@@ -39,7 +42,10 @@ impl RegisteredEndpoint {
             .executor
             .stream(args)
             .await
-            .map_err(|e| EngineError::Handler(e.to_string()))?;
+            .map_err(|e| EngineError::Handler {
+                status: status_of(&e),
+                message: e.to_string(),
+            })?;
 
         let endpoint = self.clone();
         let (tx, rx) = mpsc::channel(16);
@@ -52,7 +58,10 @@ impl RegisteredEndpoint {
                         .validate(&value)
                         .map(|()| value)
                         .map_err(EngineError::Output),
-                    Err(e) => Err(EngineError::Handler(e.to_string())),
+                    Err(e) => Err(EngineError::Handler {
+                        status: status_of(&e),
+                        message: e.to_string(),
+                    }),
                 };
                 if tx.send(item).await.is_err() {
                     break;

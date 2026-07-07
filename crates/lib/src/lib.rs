@@ -9,7 +9,9 @@ pub use inventory;
 
 pub mod prelude {
     #[cfg(feature = "server")]
-    pub use crate::server::endpoint::{HandlerError, IntoHandlerOutput, StreamOutput};
+    pub use crate::server::endpoint::{
+        HandlerError, IntoHandlerOutput, StatusCode, StreamOutput, status_of, with_status,
+    };
     pub use crate::schema::{AsSchema, Blob, Date, FromValue, IntoValue};
 
     #[cfg(feature = "macros")]

@@ -160,4 +160,34 @@ mod tests {
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert!(body["error"].as_str().unwrap().contains("no seven"));
     }
+
+    #[tokio::test]
+    async fn handler_errors_use_their_attached_status() {
+        let endpoint = Endpoint {
+            name: "fail".into(),
+            signature: Signature {
+                params: vec![],
+                output: Schema::Primitive(Primitive::I64),
+            },
+            access: Access::Rest {
+                method: http::Method::GET,
+                url: "/missing".into(),
+            },
+            binding: Binding::Native(Arc::new(|_: &[Value]| {
+                Err(crate::server::endpoint::with_status(
+                    StatusCode::NOT_FOUND,
+                    "no such thing",
+                ))
+            })),
+        };
+        let router = crate::server::router(&Engine::new(vec![endpoint]).unwrap());
+
+        let request = Request::builder()
+            .uri("/missing")
+            .body(Body::empty())
+            .unwrap();
+        let (status, body) = send(router, request).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert!(body["error"].as_str().unwrap().contains("no such thing"));
+    }
 }

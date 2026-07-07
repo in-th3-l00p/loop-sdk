@@ -95,11 +95,14 @@ pub fn serve_blocking(
 
 impl IntoResponse for EngineError {
     fn into_response(self) -> Response {
-        let status = match self {
+        let status = match &self {
             EngineError::Decode(_) | EngineError::Input(_) | EngineError::MissingParam(_) => {
                 StatusCode::BAD_REQUEST
             }
             EngineError::Unknown(_) => StatusCode::NOT_FOUND,
+            EngineError::Handler { .. } => {
+                self.status().unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+            }
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
         (

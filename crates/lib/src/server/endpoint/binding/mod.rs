@@ -1,7 +1,7 @@
 mod handler;
 mod source;
 
-pub use handler::{Handler, HandlerError};
+pub use handler::{Handler, HandlerError, status_of, with_status};
 pub use source::{Source, ValueStream};
 
 use std::sync::Arc;

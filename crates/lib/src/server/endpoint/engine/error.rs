@@ -1,5 +1,7 @@
 use std::fmt;
 
+use http::StatusCode;
+
 use crate::schema::ValidationError;
 
 #[derive(Debug)]
@@ -10,8 +12,20 @@ pub enum EngineError {
     Input(ValidationError),
     Output(ValidationError),
     MissingParam(String),
-    Handler(String),
+    Handler {
+        status: Option<StatusCode>,
+        message: String,
+    },
     Io(std::io::Error),
+}
+
+impl EngineError {
+    pub fn status(&self) -> Option<StatusCode> {
+        match self {
+            EngineError::Handler { status, .. } => *status,
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for EngineError {
@@ -23,7 +37,7 @@ impl fmt::Display for EngineError {
             EngineError::Input(e) => write!(f, "invalid argument: {e}"),
             EngineError::Output(e) => write!(f, "endpoint produced invalid output: {e}"),
             EngineError::MissingParam(name) => write!(f, "missing parameter: {name}"),
-            EngineError::Handler(msg) => write!(f, "endpoint failed: {msg}"),
+            EngineError::Handler { message, .. } => write!(f, "endpoint failed: {message}"),
             EngineError::Io(e) => write!(f, "io error: {e}"),
         }
     }

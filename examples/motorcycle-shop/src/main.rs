@@ -80,7 +80,7 @@ fn delete(id: u64) -> Result<bool, HandlerError> {
 }
 
 fn not_found(id: u64) -> HandlerError {
-    format!("no motorcycle with id {id}").into()
+    with_status(StatusCode::NOT_FOUND, format!("no motorcycle with id {id}"))
 }
 
 fn main() {
