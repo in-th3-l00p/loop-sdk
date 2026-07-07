@@ -7,10 +7,10 @@ INSTALL_DIR="${LOOP_INSTALL_DIR:-$HOME/.local/bin}"
 MARKER="# added by loop-sdk installer"
 
 echo "building loop-cli (release)..."
-cargo build --release -p loop-cli --manifest-path "$REPO_DIR/Cargo.toml"
+cargo build --release -p loop-cli --manifest-path "$REPO_DIR/crates/Cargo.toml"
 
 mkdir -p "$INSTALL_DIR"
-install -m 755 "$REPO_DIR/target/release/loop-cli" "$INSTALL_DIR/loop"
+install -m 755 "$REPO_DIR/crates/target/release/loop-cli" "$INSTALL_DIR/loop"
 echo "installed $INSTALL_DIR/loop"
 
 profile_for_shell() {

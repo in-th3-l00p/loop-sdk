@@ -2,7 +2,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Error, Fields, Result};
 
-use crate::check;
+use crate::schema::check;
 
 pub fn expand(input: DeriveInput) -> Result<TokenStream> {
     if !input.generics.params.is_empty() {

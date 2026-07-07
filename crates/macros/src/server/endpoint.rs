@@ -3,7 +3,7 @@ use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::{Error, FnArg, Ident, ItemFn, LitStr, Pat, Result, Token, Type};
 
-use crate::check;
+use crate::schema::check;
 
 pub struct RestArgs {
     method: Ident,

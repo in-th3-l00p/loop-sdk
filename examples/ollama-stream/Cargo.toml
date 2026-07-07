@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-lib = { path = "../../lib", features = ["server", "macros"] }
+lib = { path = "../../crates/lib", features = ["server", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ureq = { version = "2", features = ["json"] }
