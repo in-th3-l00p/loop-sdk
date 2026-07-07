@@ -1112,6 +1112,7 @@ dependencies = [
  "lib",
  "serde",
  "tempfile",
+ "tokio",
  "toml",
 ]
 

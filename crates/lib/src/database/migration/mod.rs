@@ -1,6 +1,7 @@
 mod runner;
 
 pub(crate) use runner::apply;
+pub use runner::applied_versions;
 
 #[derive(Debug, Clone)]
 pub struct Migration {

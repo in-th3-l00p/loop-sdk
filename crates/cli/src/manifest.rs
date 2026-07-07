@@ -38,6 +38,13 @@ impl Manifest {
                 .unwrap_or_else(|| format!("sqlite:{}.db", self.name)),
         )
     }
+
+    /// The connection config `loop db`/`loop migration` commands act on.
+    pub fn database_config(&self) -> Result<lib::database::Config, String> {
+        self.database_url()
+            .map(lib::database::Config::from_url)
+            .ok_or_else(|| "no database configured — add a [database] section to loop.toml".to_string())
+    }
 }
 
 #[derive(Debug)]

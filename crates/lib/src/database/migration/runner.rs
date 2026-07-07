@@ -21,7 +21,6 @@ pub(crate) async fn apply(
 ) -> Result<usize, DatabaseError> {
     let ordered = ordered(migrations)?;
 
-    db.raw(TRACKING_TABLE).await?;
     let applied = applied_versions(db).await?;
     let head = applied.last().map(|(version, _)| *version);
 
@@ -109,7 +108,9 @@ async fn run_one(db: &Database, migration: &Migration) -> Result<(), DatabaseErr
         })
 }
 
-async fn applied_versions(db: &Database) -> Result<Vec<(i64, String)>, DatabaseError> {
+pub async fn applied_versions(db: &Database) -> Result<Vec<(i64, String)>, DatabaseError> {
+    db.raw(TRACKING_TABLE).await?;
+
     let schema = Schema::Record(vec![
         ("version".into(), Schema::Primitive(Primitive::I64)),
         ("checksum".into(), Schema::Primitive(Primitive::Str)),

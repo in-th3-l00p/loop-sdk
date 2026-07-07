@@ -8,6 +8,7 @@ pub enum DatabaseError {
     Decode(String),
     Unsupported(String),
     Migration { name: String, message: String },
+    Io(std::io::Error),
 }
 
 impl fmt::Display for DatabaseError {
@@ -21,6 +22,7 @@ impl fmt::Display for DatabaseError {
             DatabaseError::Migration { name, message } => {
                 write!(f, "migration {name:?}: {message}")
             }
+            DatabaseError::Io(source) => write!(f, "filesystem error: {source}"),
         }
     }
 }
@@ -29,6 +31,7 @@ impl std::error::Error for DatabaseError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             DatabaseError::Connect(source) | DatabaseError::Query(source) => Some(source),
+            DatabaseError::Io(source) => Some(source),
             _ => None,
         }
     }
