@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use futures_util::StreamExt;
-use lib::endpoint::engine::Engine;
-use lib::endpoint::{Access, Binding, Endpoint, HandlerError, Parameter, Signature, ValueStream};
+use lib::server::endpoint::engine::Engine;
+use lib::server::endpoint::{Access, Binding, Endpoint, HandlerError, Parameter, Signature, ValueStream};
 use lib::schema::{Primitive, Schema, Value};
 use serde_json::json;
 

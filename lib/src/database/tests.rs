@@ -1,5 +1,5 @@
 use super::{Config, Database, DatabaseError, Driver, Migration};
-use crate::endpoint::HandlerError;
+use crate::server::endpoint::HandlerError;
 use crate::schema::{AsSchema, FromValue, Primitive, Schema, Value};
 
 #[derive(Debug, PartialEq)]

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use crate::endpoint::{Handler, HandlerError, Source};
+use crate::server::endpoint::{Handler, HandlerError, Source};
 use crate::schema::Value;
 
 pub async fn call(handler: Arc<dyn Handler>, args: Vec<Value>) -> Result<Value, HandlerError> {
@@ -59,7 +59,7 @@ mod tests {
     #[tokio::test]
     async fn subscribe_bridges_iterator_to_channel_in_order() {
         let source: Arc<dyn Source> = Arc::new(
-            |_: &[Value]| -> Result<crate::endpoint::ValueStream, HandlerError> {
+            |_: &[Value]| -> Result<crate::server::endpoint::ValueStream, HandlerError> {
                 Ok(Box::new((0..3).map(|i| Ok(Value::I64(i)))))
             },
         );
@@ -76,7 +76,7 @@ mod tests {
     #[tokio::test]
     async fn subscribe_propagates_mid_stream_errors() {
         let source: Arc<dyn Source> = Arc::new(
-            |_: &[Value]| -> Result<crate::endpoint::ValueStream, HandlerError> {
+            |_: &[Value]| -> Result<crate::server::endpoint::ValueStream, HandlerError> {
                 Ok(Box::new(
                     vec![Ok(Value::I64(1)), Err::<Value, HandlerError>("lost".into())].into_iter(),
                 ))

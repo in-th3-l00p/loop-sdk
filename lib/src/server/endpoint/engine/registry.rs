@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use super::error::EngineError;
 use super::executor::Executor;
-use crate::endpoint::{Access, Binding, Endpoint, Signature};
+use crate::server::endpoint::{Access, Binding, Endpoint, Signature};
 use crate::schema::Value;
 
 pub struct RegisteredEndpoint {
@@ -195,8 +195,8 @@ mod tests {
                     Binding::Stream(
                         Arc::new(
                             |_: &[Value]| -> Result<
-                                crate::endpoint::ValueStream,
-                                crate::endpoint::HandlerError,
+                                crate::server::endpoint::ValueStream,
+                                crate::server::endpoint::HandlerError,
                             > { Ok(Box::new(std::iter::empty())) },
                         ),
                     ),
@@ -212,7 +212,7 @@ mod tests {
         let endpoints = prepare(vec![Endpoint {
             name: "id".into(),
             signature: Signature {
-                params: vec![crate::endpoint::Parameter {
+                params: vec![crate::server::endpoint::Parameter {
                     name: "n".into(),
                     schema: Schema::Primitive(Primitive::I64),
                 }],

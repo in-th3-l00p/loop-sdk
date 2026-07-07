@@ -33,8 +33,8 @@ impl Parse for RestArgs {
 pub fn rest(args: RestArgs, function: ItemFn) -> Result<TokenStream> {
     let RestArgs { method, url } = args;
     let access = quote! {
-        ::lib::endpoint::Access::Rest {
-            method: ::lib::endpoint::Method::#method,
+        ::lib::server::endpoint::Access::Rest {
+            method: ::lib::server::endpoint::Method::#method,
             url: #url.into(),
         }
     };
@@ -42,12 +42,12 @@ pub fn rest(args: RestArgs, function: ItemFn) -> Result<TokenStream> {
 }
 
 pub fn sse(url: LitStr, function: ItemFn) -> Result<TokenStream> {
-    let access = quote! { ::lib::endpoint::Access::Sse { url: #url.into() } };
+    let access = quote! { ::lib::server::endpoint::Access::Sse { url: #url.into() } };
     expand(function, access, Kind::Stream)
 }
 
 pub fn live(url: LitStr, function: ItemFn) -> Result<TokenStream> {
-    let access = quote! { ::lib::endpoint::Access::Live { url: #url.into() } };
+    let access = quote! { ::lib::server::endpoint::Access::Live { url: #url.into() } };
     expand(function, access, Kind::Stream)
 }
 
@@ -87,27 +87,27 @@ fn expand(mut function: ItemFn, access: TokenStream, kind: Kind) -> Result<Token
 
     let (output_trait, output_schema, invoke) = match kind {
         Kind::Call => (
-            quote! { ::lib::endpoint::IntoHandlerOutput },
-            quote! { <<__R as ::lib::endpoint::IntoHandlerOutput>::Ok as ::lib::schema::AsSchema>::schema() },
-            quote! { ::lib::endpoint::IntoHandlerOutput::into_handler_output(#name(#(#arg_names),*)) },
+            quote! { ::lib::server::endpoint::IntoHandlerOutput },
+            quote! { <<__R as ::lib::server::endpoint::IntoHandlerOutput>::Ok as ::lib::schema::AsSchema>::schema() },
+            quote! { ::lib::server::endpoint::IntoHandlerOutput::into_handler_output(#name(#(#arg_names),*)) },
         ),
         Kind::Stream => (
-            quote! { ::lib::endpoint::StreamOutput },
-            quote! { <<__R as ::lib::endpoint::StreamOutput>::Item as ::lib::schema::AsSchema>::schema() },
-            quote! { ::lib::endpoint::StreamOutput::into_value_stream(#name(#(#arg_names),*)) },
+            quote! { ::lib::server::endpoint::StreamOutput },
+            quote! { <<__R as ::lib::server::endpoint::StreamOutput>::Item as ::lib::schema::AsSchema>::schema() },
+            quote! { ::lib::server::endpoint::StreamOutput::into_value_stream(#name(#(#arg_names),*)) },
         ),
     };
 
     let binding = match kind {
-        Kind::Call => quote! { ::lib::endpoint::Binding::Native },
-        Kind::Stream => quote! { ::lib::endpoint::Binding::Stream },
+        Kind::Call => quote! { ::lib::server::endpoint::Binding::Native },
+        Kind::Stream => quote! { ::lib::server::endpoint::Binding::Stream },
     };
 
     Ok(quote! {
         #function
 
         #[doc(hidden)]
-        fn #factory() -> ::lib::endpoint::Endpoint {
+        fn #factory() -> ::lib::server::endpoint::Endpoint {
             fn __output_schema<__F, __R>(_: &__F) -> ::lib::schema::Schema
             where
                 __F: Fn(#(#arg_types),*) -> __R,
@@ -116,11 +116,11 @@ fn expand(mut function: ItemFn, access: TokenStream, kind: Kind) -> Result<Token
                 #output_schema
             }
 
-            ::lib::endpoint::Endpoint {
+            ::lib::server::endpoint::Endpoint {
                 name: #name_str.into(),
-                signature: ::lib::endpoint::Signature {
+                signature: ::lib::server::endpoint::Signature {
                     params: vec![
-                        #(::lib::endpoint::Parameter {
+                        #(::lib::server::endpoint::Parameter {
                             name: #arg_labels.into(),
                             schema: #arg_schemas,
                         },)*
@@ -147,7 +147,7 @@ fn expand(mut function: ItemFn, access: TokenStream, kind: Kind) -> Result<Token
         }
 
         ::lib::inventory::submit! {
-            ::lib::endpoint::Registration(#factory)
+            ::lib::server::endpoint::Registration(#factory)
         }
     })
 }

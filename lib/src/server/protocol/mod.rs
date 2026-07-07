@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use axum::Router;
 
-use crate::endpoint::Access;
-use crate::endpoint::engine::RegisteredEndpoint;
+use crate::server::endpoint::Access;
+use crate::server::endpoint::engine::RegisteredEndpoint;
 
 pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
     match &endpoint.access {

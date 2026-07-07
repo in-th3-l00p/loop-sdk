@@ -7,8 +7,8 @@ use axum::extract::{Path, Query};
 use axum::response::Response;
 use axum::routing::get;
 
-use crate::endpoint::Access;
-use crate::endpoint::engine::{EngineError, RegisteredEndpoint};
+use crate::server::endpoint::Access;
+use crate::server::endpoint::engine::{EngineError, RegisteredEndpoint};
 use crate::schema::Value;
 use crate::server::wire::{json, request};
 

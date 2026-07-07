@@ -6,8 +6,8 @@ use axum::routing::{MethodFilter, on};
 use axum::{Json, Router};
 use serde_json::Value as JsonValue;
 
-use crate::endpoint::Access;
-use crate::endpoint::engine::{EngineError, RegisteredEndpoint};
+use crate::server::endpoint::Access;
+use crate::server::endpoint::engine::{EngineError, RegisteredEndpoint};
 use crate::server::wire::{json, request};
 
 pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
@@ -49,8 +49,8 @@ async fn handle(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::endpoint::engine::Engine;
-    use crate::endpoint::{Binding, Endpoint, Parameter, Signature};
+    use crate::server::endpoint::engine::Engine;
+    use crate::server::endpoint::{Binding, Endpoint, Parameter, Signature};
     use crate::schema::{Primitive, Schema, Value};
     use axum::body::Body;
     use axum::http::{Method, Request, StatusCode};

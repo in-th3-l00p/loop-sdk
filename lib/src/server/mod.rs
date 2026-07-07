@@ -1,6 +1,7 @@
 /* shared HTTP/SSE/WebSocket serving layer on top of the engine, used by the
 CLI dev server and by compiled standalone binaries */
 
+pub mod endpoint;
 mod protocol;
 mod wire;
 
@@ -14,7 +15,7 @@ pub fn run() {
         .and_then(|port| port.parse().ok())
         .unwrap_or(3000);
 
-    let engine = match Engine::new(crate::endpoint::registered()) {
+    let engine = match Engine::new(crate::server::endpoint::registered()) {
         Ok(engine) => engine,
         Err(e) => {
             eprintln!("error: {e}");
@@ -54,8 +55,8 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 
-use crate::endpoint::Access;
-use crate::endpoint::engine::{Engine, EngineError};
+use crate::server::endpoint::Access;
+use crate::server::endpoint::engine::{Engine, EngineError};
 
 pub fn router(engine: &Engine) -> axum::Router {
     engine

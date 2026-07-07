@@ -53,7 +53,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
                     .position(|(key, _)| {
                         matches!(key, ::lib::schema::Value::Str(name) if name.as_str() == #label)
                     })
-                    .ok_or_else(|| ::lib::endpoint::HandlerError::from(#missing))?;
+                    .ok_or_else(|| ::lib::server::endpoint::HandlerError::from(#missing))?;
                 let (_, value) = entries.swap_remove(index);
                 <#ty as ::lib::schema::FromValue>::from_value(value)?
             };
@@ -77,7 +77,7 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
         impl ::lib::schema::FromValue for #name {
             fn from_value(
                 value: ::lib::schema::Value,
-            ) -> ::std::result::Result<Self, ::lib::endpoint::HandlerError> {
+            ) -> ::std::result::Result<Self, ::lib::server::endpoint::HandlerError> {
                 let ::lib::schema::Value::Map(mut entries) = value else {
                     return ::std::result::Result::Err("expected a record".into());
                 };
@@ -86,11 +86,11 @@ pub fn expand(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl ::lib::endpoint::IntoHandlerOutput for #name {
+        impl ::lib::server::endpoint::IntoHandlerOutput for #name {
             type Ok = Self;
             fn into_handler_output(
                 self,
-            ) -> ::std::result::Result<::lib::schema::Value, ::lib::endpoint::HandlerError> {
+            ) -> ::std::result::Result<::lib::schema::Value, ::lib::server::endpoint::HandlerError> {
                 ::std::result::Result::Ok(::lib::schema::IntoValue::into_value(self))
             }
         }

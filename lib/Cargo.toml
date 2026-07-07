@@ -7,8 +7,10 @@ edition = "2024"
 default = ["server", "database", "macros", "db-sqlite"]
 # engine: registers endpoints and manages how they execute (validation +
 # native dispatch). server: shared HTTP/SSE/WebSocket serving layer on top of
-# the engine. Both kept out of the default build so consumers who only need
-# Schema/Endpoint definitions stay dependency-light.
+# the engine, and now also owns the endpoint module itself (Endpoint, Schema
+# conversion errors, etc.) since endpoints are a server concern. Consumers who
+# only need bare Schema definitions without endpoints can still stay
+# dependency-light by disabling default features and skipping "server".
 engine = ["dep:tokio"]
 server = ["engine", "dep:axum", "dep:serde_json", "dep:tokio-stream", "dep:base64"]
 # macros: the #[rest]/#[sse]/#[live] attributes + automatic registration

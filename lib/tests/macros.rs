@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use futures_util::StreamExt;
-use lib::endpoint::engine::Engine;
+use lib::server::endpoint::engine::Engine;
 use lib::prelude::*;
 use serde_json::json;
 
@@ -62,7 +62,7 @@ fn join(
 }
 
 async fn spawn() -> String {
-    let engine = Engine::new(lib::endpoint::registered()).unwrap();
+    let engine = Engine::new(lib::server::endpoint::registered()).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let router = lib::server::router(&engine);

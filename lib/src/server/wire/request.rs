@@ -5,8 +5,8 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use serde_json::Value as Json;
 
 use super::json;
-use crate::endpoint::Signature;
-use crate::endpoint::engine::EngineError;
+use crate::server::endpoint::Signature;
+use crate::server::endpoint::engine::EngineError;
 use crate::schema::{Primitive, Schema, Value};
 
 pub fn collect_args(
@@ -91,7 +91,7 @@ fn decode_scalar(name: &str, schema: &Schema, raw: &str) -> Result<Value, Engine
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::endpoint::Parameter;
+    use crate::server::endpoint::Parameter;
     use serde_json::json;
 
     fn signature(params: Vec<(&str, Schema)>) -> Signature {

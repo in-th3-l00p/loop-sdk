@@ -1,6 +1,5 @@
 #[cfg(feature = "database")]
 pub mod database;
-pub mod endpoint;
 pub mod schema;
 #[cfg(feature = "server")]
 pub mod server;
@@ -9,7 +8,8 @@ pub mod server;
 pub use inventory;
 
 pub mod prelude {
-    pub use crate::endpoint::{HandlerError, IntoHandlerOutput, StreamOutput};
+    #[cfg(feature = "server")]
+    pub use crate::server::endpoint::{HandlerError, IntoHandlerOutput, StreamOutput};
     pub use crate::schema::{AsSchema, Blob, Date, FromValue, IntoValue};
 
     #[cfg(feature = "macros")]

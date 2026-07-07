@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use crate::endpoint::{Handler, HandlerError, Source};
+use crate::server::endpoint::{Handler, HandlerError, Source};
 use crate::schema::Value;
 
 pub enum Executor {

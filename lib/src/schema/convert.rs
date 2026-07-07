@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::hash::Hash;
 
 use super::{Primitive, Schema, Value};
-use crate::endpoint::HandlerError;
+use crate::server::endpoint::HandlerError;
 
 pub trait AsSchema {
     fn schema() -> Schema;
