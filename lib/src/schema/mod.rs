@@ -56,8 +56,6 @@ impl Schema {
         }
     }
 
-    /// Whether `Value::Null` satisfies this schema (i.e. it is optional,
-    /// possibly under constraints).
     pub fn accepts_null(&self) -> bool {
         matches!(self.base(), Schema::Optional(_))
     }

@@ -14,7 +14,6 @@ pub(crate) fn validate(schema: &Schema, value: &Value) -> Result<(), ValidationE
         Schema::Record(fields) => validate_record(fields, value),
         Schema::Constrained(inner, constraints) => {
             validate(inner, value)?;
-            // constraints describe present values; an absent optional passes
             if !matches!(value, Value::Null) {
                 for constraint in constraints {
                     constraint.check(value)?;

@@ -2,14 +2,10 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum DatabaseError {
-    /// No pool is available: not initialized, or the driver the URL needs
-    /// was not compiled in.
     Unavailable(String),
     Connect(sqlx::Error),
     Query(sqlx::Error),
-    /// A row or column could not be mapped to the requested schema.
     Decode(String),
-    /// The operation is outside what the value bridge supports.
     Unsupported(String),
     Migration { name: String, message: String },
 }

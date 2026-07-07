@@ -62,7 +62,6 @@ fn decode_scalar(name: &str, schema: &Schema, raw: &str) -> Result<Value, Engine
         ))
     };
 
-    // a present optional parameter parses as its inner type
     let mut base = schema.base();
     while let Schema::Optional(inner) = base {
         base = inner.base();
