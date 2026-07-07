@@ -1,3 +1,5 @@
+#[cfg(feature = "auth")]
+pub mod auth;
 #[cfg(feature = "database")]
 pub mod database;
 #[cfg(feature = "eth")]
@@ -15,6 +17,8 @@ pub mod prelude {
         HandlerError, IntoHandlerOutput, StatusCode, StreamOutput, status_of, with_status,
     };
     pub use crate::schema::{AsSchema, Blob, Date, FromValue, IntoValue};
+    #[cfg(feature = "auth")]
+    pub use crate::auth::{User, users};
     #[cfg(feature = "eth")]
     pub use crate::eth::{Address, Signer, TxHandle, U256, Wei};
 

@@ -15,7 +15,23 @@ pub fn run() {
         .and_then(|port| port.parse().ok())
         .unwrap_or(3000);
 
-    let engine = match Engine::new(crate::server::endpoint::registered()) {
+    #[allow(unused_mut)]
+    let mut endpoints = crate::server::endpoint::registered();
+
+    #[cfg(feature = "auth")]
+    let auth_config = match crate::auth::Config::from_env() {
+        Ok(config) => config,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+    #[cfg(feature = "auth")]
+    if let Some(config) = &auth_config {
+        endpoints.extend(crate::auth::endpoints(config));
+    }
+
+    let engine = match Engine::new(endpoints) {
         Ok(engine) => engine,
         Err(e) => {
             eprintln!("error: {e}");
@@ -48,6 +64,21 @@ pub fn run() {
         Err(e) => {
             eprintln!("error: {e}");
             std::process::exit(1);
+        }
+    }
+
+    // after the database: auth owns tables in it
+    #[cfg(feature = "auth")]
+    if let Some(config) = auth_config {
+        match runtime.block_on(crate::auth::init(config)) {
+            Ok(auth) => println!(
+                "auth enabled ({} provider(s))",
+                auth.config().providers.len()
+            ),
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
         }
     }
 

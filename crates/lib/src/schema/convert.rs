@@ -195,6 +195,76 @@ map_conversions! {
     HashMap: Hash, Eq;
 }
 
+/// Hand-written equivalent of what #[derive(Schema)] emits, for record types
+/// defined inside this crate — the derive's generated paths only resolve for
+/// consumers of `lib`.
+#[allow(unused_macros)] // used by the eth and auth features
+macro_rules! record_conversions {
+    ($name:ident { $($field:ident: $ty:ty),* $(,)? }) => {
+        impl crate::schema::AsSchema for $name {
+            fn schema() -> crate::schema::Schema {
+                crate::schema::Schema::Record(vec![
+                    $((
+                        stringify!($field).to_string(),
+                        <$ty as crate::schema::AsSchema>::schema(),
+                    )),*
+                ])
+            }
+        }
+
+        impl crate::schema::IntoValue for $name {
+            fn into_value(self) -> crate::schema::Value {
+                crate::schema::Value::Map(vec![
+                    $((
+                        crate::schema::Value::Str(stringify!($field).to_string()),
+                        crate::schema::IntoValue::into_value(self.$field),
+                    )),*
+                ])
+            }
+        }
+
+        impl crate::schema::FromValue for $name {
+            fn from_value(
+                value: crate::schema::Value,
+            ) -> Result<Self, crate::server::endpoint::HandlerError> {
+                let crate::schema::Value::Map(mut entries) = value else {
+                    return Err("expected a record".into());
+                };
+                $(
+                    let $field = {
+                        let label = stringify!($field);
+                        let index = entries
+                            .iter()
+                            .position(|(key, _)| {
+                                matches!(key, crate::schema::Value::Str(name) if name == label)
+                            })
+                            .ok_or_else(|| {
+                                crate::server::endpoint::HandlerError::from(format!(
+                                    "missing field {label:?}"
+                                ))
+                            })?;
+                        let (_, value) = entries.swap_remove(index);
+                        <$ty as crate::schema::FromValue>::from_value(value)?
+                    };
+                )*
+                Ok($name { $($field),* })
+            }
+        }
+
+        impl crate::server::endpoint::IntoHandlerOutput for $name {
+            type Ok = Self;
+            fn into_handler_output(
+                self,
+            ) -> Result<crate::schema::Value, crate::server::endpoint::HandlerError> {
+                Ok(crate::schema::IntoValue::into_value(self))
+            }
+        }
+    };
+}
+
+#[allow(unused_imports)]
+pub(crate) use record_conversions;
+
 #[cfg(test)]
 mod tests {
     use super::*;

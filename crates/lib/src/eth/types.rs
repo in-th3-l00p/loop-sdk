@@ -5,6 +5,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use super::error::EthError;
+use crate::schema::convert::record_conversions;
 use crate::schema::{AsSchema, Constraint, FromValue, IntoValue, Primitive, Schema, Value};
 use crate::server::endpoint::{HandlerError, IntoHandlerOutput};
 
@@ -304,58 +305,6 @@ macro_rules! infallible_outputs {
 }
 
 infallible_outputs!(Address, U256, Wei);
-
-/// Hand-written equivalent of what #[derive(Schema)] emits, for record types
-/// defined inside this crate (the derive's generated paths only resolve for
-/// consumers of `lib`).
-macro_rules! record_conversions {
-    ($name:ident { $($field:ident: $ty:ty),* $(,)? }) => {
-        impl AsSchema for $name {
-            fn schema() -> Schema {
-                Schema::Record(vec![
-                    $((stringify!($field).to_string(), <$ty as AsSchema>::schema())),*
-                ])
-            }
-        }
-
-        impl IntoValue for $name {
-            fn into_value(self) -> Value {
-                Value::Map(vec![
-                    $((
-                        Value::Str(stringify!($field).to_string()),
-                        self.$field.into_value(),
-                    )),*
-                ])
-            }
-        }
-
-        impl FromValue for $name {
-            fn from_value(value: Value) -> Result<Self, HandlerError> {
-                let Value::Map(mut entries) = value else {
-                    return Err("expected a record".into());
-                };
-                $(
-                    let $field = {
-                        let label = stringify!($field);
-                        let index = entries
-                            .iter()
-                            .position(|(key, _)| {
-                                matches!(key, Value::Str(name) if name == label)
-                            })
-                            .ok_or_else(|| {
-                                HandlerError::from(format!("missing field {label:?}"))
-                            })?;
-                        let (_, value) = entries.swap_remove(index);
-                        <$ty as FromValue>::from_value(value)?
-                    };
-                )*
-                Ok($name { $($field),* })
-            }
-        }
-
-        infallible_outputs!($name);
-    };
-}
 
 /// A block header, as streamed by [`blocks`](super::blocks).
 #[derive(Debug, Clone, PartialEq)]
