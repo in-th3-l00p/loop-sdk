@@ -11,3 +11,9 @@ target/
 
 # example dev-server logs
 dev.log
+
+# local sqlite databases created by `loop db create`/`loop dev`
+*.db
+*.db-wal
+*.db-shm
+*.db-journal

@@ -1,0 +1,6 @@
+name = "todo-list"
+
+[dev]
+port = 3000
+
+[database]
