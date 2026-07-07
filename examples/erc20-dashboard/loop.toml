@@ -1,0 +1,13 @@
+name = "erc20-dashboard"
+
+[dev]
+port = 3000
+
+[eth]
+rpc = "env:ETH_RPC_URL"
+chain_id = 1
+
+# to send transactions, generate a key with `loop eth wallet new` and add:
+#
+# [eth.treasury]
+# key = "env:TREASURY_KEY"

@@ -41,6 +41,16 @@ pub fn run() {
         }
     }
 
+    #[cfg(feature = "eth")]
+    match runtime.block_on(crate::eth::init_from_env()) {
+        Ok(Some(eth)) => println!("eth connected (chain {})", eth.chain_id()),
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+
     println!("listening on http://{addr}:{port}");
     for route in routes(&engine) {
         println!("  {route}");

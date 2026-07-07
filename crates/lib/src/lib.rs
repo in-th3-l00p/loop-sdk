@@ -1,5 +1,7 @@
 #[cfg(feature = "database")]
 pub mod database;
+#[cfg(feature = "eth")]
+pub mod eth;
 pub mod schema;
 #[cfg(feature = "server")]
 pub mod server;
@@ -13,7 +15,11 @@ pub mod prelude {
         HandlerError, IntoHandlerOutput, StatusCode, StreamOutput, status_of, with_status,
     };
     pub use crate::schema::{AsSchema, Blob, Date, FromValue, IntoValue};
+    #[cfg(feature = "eth")]
+    pub use crate::eth::{Address, Signer, TxHandle, U256, Wei};
 
     #[cfg(feature = "macros")]
     pub use loop_macros::{Schema, live, rest, sse};
+    #[cfg(all(feature = "macros", feature = "eth"))]
+    pub use loop_macros::contract;
 }

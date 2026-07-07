@@ -5,7 +5,7 @@ mod migrations;
 mod runtime;
 
 use clap::Parser;
-use cli::{Args, Commands, DbCommands, MigrationCommands};
+use cli::{Args, Commands, DbCommands, EthCommands, MigrationCommands, WalletCommands};
 
 fn main() {
     let args = Args::parse();
@@ -24,6 +24,12 @@ fn main() {
         Commands::Migration { command } => match command {
             MigrationCommands::Create { dir, name } => commands::migration::create(&dir, &name),
             MigrationCommands::Status { dir } => commands::migration::status(&dir),
+        },
+        Commands::Eth { command } => match command {
+            EthCommands::Wallet { command } => match command {
+                WalletCommands::New => commands::eth::wallet_new(),
+            },
+            EthCommands::Status { dir } => commands::eth::status(&dir),
         },
     }
 }

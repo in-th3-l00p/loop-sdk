@@ -4,18 +4,11 @@ import { Callout, Code, DocTitle, H2, Lead, P, Ul, Li } from "@/components/docs/
 export default function Eth() {
   return (
     <article>
-      <DocTitle ornament="❦ blueprint" planned>
-        ethereum sdk
-      </DocTitle>
+      <DocTitle ornament="❦ ethereum">ethereum sdk</DocTitle>
       <Lead>
         contracts, wallets, and on-chain state as first-class citizens of your
         backend — typed like everything else, streamed like everything else.
       </Lead>
-
-      <Callout tone="planned">
-        this page is a design document. the API below is settled in shape but not yet
-        implemented — names may drift before it ships.
-      </Callout>
 
       <H2>configuration</H2>
       <CodeBlock
@@ -31,7 +24,10 @@ key = "env:TREASURY_KEY"`}
       <P>
         the rpc connection is established at startup alongside the database. the
         optional treasury is a server-owned wallet for transactions your app sends on
-        its own behalf.
+        its own behalf — generate a key with <Code>loop eth wallet new</Code>, check
+        connectivity with <Code>loop eth status</Code>. values with an{" "}
+        <Code>env:</Code> prefix resolve from the environment, so secrets stay out of
+        loop.toml. enable the sdk with the <Code>eth</Code> cargo feature.
       </P>
 
       <H2>chain primitives</H2>
@@ -42,7 +38,7 @@ key = "env:TREASURY_KEY"`}
         as hex strings.
       </P>
       <CodeBlock
-        title="planned — module surface"
+        title="module surface"
         code={`use lib::eth;
 
 #[rest(get, "/balance/{address}")]
@@ -68,10 +64,8 @@ fn gas() -> Result<Wei, HandlerError> {
         the compiler.
       </P>
       <CodeBlock
-        title="planned — contract bindings"
-        code={`use lib::eth::contract;
-
-#[contract("abi/erc20.json")]
+        title="contract bindings"
+        code={`#[contract("abi/erc20.json")]
 struct Erc20;
 
 #[rest(get, "/usdc/{holder}")]
@@ -81,9 +75,9 @@ fn usdc_balance(holder: Address) -> Result<U256, HandlerError> {
 }
 
 #[rest(post, "/tip")]
-fn tip(user: User, to: Address, amount: U256) -> Result<TxHandle, HandlerError> {
+fn tip(to: Address, amount: U256) -> Result<TxHandle, HandlerError> {
     let usdc = Erc20::at("0xa0b8…eb48");
-    Ok(usdc.transfer(to, amount).from(user.wallet()).send()?)
+    Ok(usdc.transfer(to, amount).from(eth::treasury()).send()?)
 }`}
       />
       <P>
@@ -99,7 +93,7 @@ fn tip(user: User, to: Address, amount: U256) -> Result<TxHandle, HandlerError> 
         contract from a browser becomes three lines:
       </P>
       <CodeBlock
-        title="planned — on-chain activity over sse"
+        title="on-chain activity over sse"
         code={`#[sse("/transfers/{token}")]
 fn transfers(token: Address) -> Result<impl Iterator<Item = Transfer>, HandlerError> {
     Ok(Erc20::at(token).events::<Transfer>()?)
@@ -110,21 +104,27 @@ fn heads() -> Result<impl Iterator<Item = Block>, HandlerError> {
     Ok(eth::blocks()?)
 }`}
       />
+      <P>
+        streams poll the rpc over http (interval set by{" "}
+        <Code>poll_interval_ms</Code>, default 2s) and start at the chain head, so
+        clients see new activity only. delivery is at-least-once with no reorg
+        rewind — deduplicate by transaction hash where that matters.
+      </P>
 
       <H2>signers</H2>
       <Ul>
-        <Li>
-          <Code>user.wallet()</Code> — the authenticated user&apos;s wallet from the{" "}
-          wallet manager; embedded wallets sign server-side, linked wallets round-trip
-          to the client
-        </Li>
         <Li>
           <Code>eth::treasury()</Code> — the app&apos;s own wallet, for protocol fees,
           airdrops, sponsored transactions
         </Li>
         <Li>
-          both implement one <Code>Signer</Code> trait, so a handler can take the rail
-          decision at runtime
+          <Code>user.wallet()</Code> <em>(ships with the auth module)</em> — the
+          authenticated user&apos;s wallet from the wallet manager; embedded wallets
+          sign server-side, linked wallets round-trip to the client
+        </Li>
+        <Li>
+          every wallet implements one <Code>Signer</Code> trait, so a handler can take
+          the rail decision at runtime
         </Li>
       </Ul>
 

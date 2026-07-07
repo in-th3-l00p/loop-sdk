@@ -19,8 +19,11 @@ fn dev(dir: &str, port: Option<u16>) -> Result<(), String> {
         .arg("run")
         .current_dir(dir)
         .env("LOOP_PORT", port.to_string());
-    if let Some(url) = manifest.database_url() {
+    if let Some(url) = manifest.database_url()? {
         command.env("LOOP_DB_URL", url);
+    }
+    for (name, value) in manifest.eth_env()? {
+        command.env(name, value);
     }
     let status = command
         .status()

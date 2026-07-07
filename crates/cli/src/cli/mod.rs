@@ -31,6 +31,10 @@ pub enum Commands {
         #[command(subcommand)]
         command: MigrationCommands,
     },
+    Eth {
+        #[command(subcommand)]
+        command: EthCommands,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -66,6 +70,27 @@ pub enum DbCommands {
         #[arg(long, default_value = ".")]
         dir: String,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum EthCommands {
+    /// Wallet management for the app's treasury
+    Wallet {
+        #[command(subcommand)]
+        command: WalletCommands,
+    },
+    /// Connect to the configured rpc and print chain id, head block and
+    /// treasury balance
+    Status {
+        #[arg(long, default_value = ".")]
+        dir: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum WalletCommands {
+    /// Generate a keypair for [eth.treasury]; prints the address and key
+    New,
 }
 
 #[derive(Subcommand, Debug)]

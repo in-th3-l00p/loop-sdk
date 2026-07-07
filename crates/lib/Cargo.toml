@@ -20,6 +20,10 @@ macros = ["dep:loop-macros", "dep:inventory"]
 database = ["engine", "dep:sqlx"]
 db-sqlite = ["database", "sqlx/sqlite"]
 db-postgres = ["database", "sqlx/postgres"]
+# eth: alloy-backed ethereum client with schema-typed chain primitives.
+# Needs "server" because FromValue/IntoHandlerOutput live in the endpoint
+# layer; alloy stays hidden behind loop's own types.
+eth = ["server", "dep:alloy"]
 
 [dependencies]
 serde = { version = "1.0.228", features = ["derive"] }
@@ -35,6 +39,19 @@ base64 = { version = "0.22", optional = true }
 loop-macros = { path = "../macros", optional = true }
 inventory = { version = "0.3", optional = true }
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio"], optional = true }
+# pinned exact: the meta-crate's feature names shift between releases
+alloy = { version = "=2.1.1", default-features = false, features = [
+    "std",
+    "providers",
+    "provider-http",
+    "reqwest-rustls-tls",
+    "rpc-types",
+    "signer-local",
+    "network",
+    "consensus",
+    "dyn-abi",
+    "k256",
+], optional = true }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
