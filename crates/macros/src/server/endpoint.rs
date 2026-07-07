@@ -129,7 +129,9 @@ fn expand(mut function: ItemFn, access: TokenStream, kind: Kind) -> Result<Token
                 },
                 access: #access,
                 binding: #binding(::std::sync::Arc::new(
-                    |__args: &[::lib::schema::Value]| {
+                    |__ctx: &::lib::server::endpoint::Context,
+                     __args: &[::lib::schema::Value]| {
+                        let _ = __ctx;
                         let [#(#arg_names),*] = __args else {
                             return ::std::result::Result::Err(
                                 "wrong number of arguments".into(),

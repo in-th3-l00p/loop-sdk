@@ -10,8 +10,8 @@ use axum::routing::get;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 
-use crate::server::endpoint::Access;
 use crate::server::endpoint::engine::{EngineError, RegisteredEndpoint};
+use crate::server::endpoint::{Access, Context};
 use crate::server::wire::{json, request};
 
 pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
@@ -23,9 +23,10 @@ pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
     router.route(
         &url,
         get(
-            move |Path(path): Path<HashMap<String, String>>,
+            move |headers: axum::http::HeaderMap,
+                  Path(path): Path<HashMap<String, String>>,
                   Query(query): Query<HashMap<String, String>>| async move {
-                handle(endpoint, path, query).await
+                handle(endpoint, headers, path, query).await
             },
         ),
     )
@@ -33,11 +34,13 @@ pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
 
 async fn handle(
     endpoint: Arc<RegisteredEndpoint>,
+    headers: axum::http::HeaderMap,
     path: HashMap<String, String>,
     query: HashMap<String, String>,
 ) -> Result<Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>>, EngineError> {
+    let ctx = Context::extract(&headers, &query);
     let args = request::collect_args(&endpoint.signature, &path, &query, None)?;
-    let rx = endpoint.stream(args).await?;
+    let rx = endpoint.stream(ctx, args).await?;
 
     let stream = ReceiverStream::new(rx).map(|item| {
         let event = match item {

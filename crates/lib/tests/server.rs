@@ -4,7 +4,9 @@ use std::sync::Arc;
 
 use futures_util::StreamExt;
 use lib::server::endpoint::engine::Engine;
-use lib::server::endpoint::{Access, Binding, Endpoint, HandlerError, Parameter, Signature, ValueStream};
+use lib::server::endpoint::{
+    Access, Binding, Context, Endpoint, HandlerError, Parameter, Signature, ValueStream,
+};
 use lib::schema::{Primitive, Schema, Value};
 use serde_json::json;
 
@@ -43,7 +45,7 @@ async fn rest_endpoint_serves_json_over_http() {
             method: http::Method::POST,
             url: "/add".into(),
         },
-        binding: Binding::Native(Arc::new(|args: &[Value]| match args {
+        binding: Binding::Native(Arc::new(|_: &Context, args: &[Value]| match args {
             [Value::I64(a), Value::I64(b)] => Ok(Value::I64(a + b)),
             _ => Err("bad args".into()),
         })),
@@ -76,7 +78,7 @@ async fn sse_endpoint_streams_data_frames() {
             url: "/ticks".into(),
         },
         binding: Binding::Stream(Arc::new(
-            |_: &[Value]| -> Result<ValueStream, HandlerError> {
+            |_: &Context, _: &[Value]| -> Result<ValueStream, HandlerError> {
                 Ok(Box::new((0..3).map(|i| Ok(Value::I64(i)))))
             },
         )),
@@ -118,7 +120,7 @@ async fn live_endpoint_pushes_values_over_websocket() {
             url: "/feed".into(),
         },
         binding: Binding::Stream(Arc::new(
-            |args: &[Value]| -> Result<ValueStream, HandlerError> {
+            |_: &Context, args: &[Value]| -> Result<ValueStream, HandlerError> {
                 let [Value::I64(from)] = args else {
                     return Err("bad args".into());
                 };

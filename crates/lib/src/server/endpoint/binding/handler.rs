@@ -3,6 +3,7 @@ use std::fmt;
 
 use http::StatusCode;
 
+use super::super::Context;
 use crate::schema::Value;
 
 pub type HandlerError = Box<dyn Error + Send + Sync>;
@@ -45,15 +46,15 @@ impl Error for Status {
 }
 
 pub trait Handler: Send + Sync {
-    fn call(&self, args: &[Value]) -> Result<Value, HandlerError>;
+    fn call(&self, ctx: &Context, args: &[Value]) -> Result<Value, HandlerError>;
 }
 
 impl<F> Handler for F
 where
-    F: Fn(&[Value]) -> Result<Value, HandlerError> + Send + Sync,
+    F: Fn(&Context, &[Value]) -> Result<Value, HandlerError> + Send + Sync,
 {
-    fn call(&self, args: &[Value]) -> Result<Value, HandlerError> {
-        self(args)
+    fn call(&self, ctx: &Context, args: &[Value]) -> Result<Value, HandlerError> {
+        self(ctx, args)
     }
 }
 

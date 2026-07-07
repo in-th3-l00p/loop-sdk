@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use crate::server::endpoint::{Handler, HandlerError, Source};
+use crate::server::endpoint::{Context, Handler, HandlerError, Source};
 use crate::schema::Value;
 
 pub enum Executor {
@@ -13,9 +13,9 @@ pub enum Executor {
 }
 
 impl Executor {
-    pub async fn call(&self, args: Vec<Value>) -> Result<Value, HandlerError> {
+    pub async fn call(&self, ctx: Context, args: Vec<Value>) -> Result<Value, HandlerError> {
         match self {
-            Executor::Native(handler) => native::call(handler.clone(), args).await,
+            Executor::Native(handler) => native::call(handler.clone(), ctx, args).await,
             Executor::Stream(_) => {
                 Err("streaming endpoint does not support request/response calls".into())
             }
@@ -24,12 +24,13 @@ impl Executor {
 
     pub async fn stream(
         &self,
+        ctx: Context,
         args: Vec<Value>,
     ) -> Result<mpsc::Receiver<Result<Value, HandlerError>>, HandlerError> {
         match self {
-            Executor::Stream(source) => native::subscribe(source.clone(), args).await,
+            Executor::Stream(source) => native::subscribe(source.clone(), ctx, args).await,
             Executor::Native(handler) => {
-                let result = native::call(handler.clone(), args).await;
+                let result = native::call(handler.clone(), ctx, args).await;
                 let (tx, rx) = mpsc::channel(1);
                 let _ = tx.send(result).await;
                 Ok(rx)

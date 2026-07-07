@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 
 use super::error::EngineError;
 use super::executor::Executor;
-use crate::server::endpoint::{Access, Binding, Endpoint, Signature, status_of};
+use crate::server::endpoint::{Access, Binding, Context, Endpoint, Signature, status_of};
 use crate::schema::Value;
 
 pub struct RegisteredEndpoint {
@@ -16,11 +16,11 @@ pub struct RegisteredEndpoint {
 }
 
 impl RegisteredEndpoint {
-    pub async fn call(&self, args: Vec<Value>) -> Result<Value, EngineError> {
+    pub async fn call(&self, ctx: Context, args: Vec<Value>) -> Result<Value, EngineError> {
         self.validate_args(&args)?;
         let output = self
             .executor
-            .call(args)
+            .call(ctx, args)
             .await
             .map_err(|e| EngineError::Handler {
                 status: status_of(&e),
@@ -35,12 +35,13 @@ impl RegisteredEndpoint {
 
     pub async fn stream(
         self: &Arc<Self>,
+        ctx: Context,
         args: Vec<Value>,
     ) -> Result<mpsc::Receiver<Result<Value, EngineError>>, EngineError> {
         self.validate_args(&args)?;
         let mut source = self
             .executor
-            .stream(args)
+            .stream(ctx, args)
             .await
             .map_err(|e| EngineError::Handler {
                 status: status_of(&e),
@@ -153,7 +154,7 @@ mod tests {
                 method: Method::GET,
                 url: url.into(),
             },
-            binding: Binding::Native(Arc::new(|_: &[Value]| Ok(Value::I64(0)))),
+            binding: Binding::Native(Arc::new(|_: &Context, _: &[Value]| Ok(Value::I64(0)))),
         }
     }
 
@@ -179,7 +180,7 @@ mod tests {
                 output: Schema::Primitive(Primitive::I64),
             },
             access: Access::Sse { url: "/a".into() },
-            binding: Binding::Native(Arc::new(|_: &[Value]| Ok(Value::I64(0)))),
+            binding: Binding::Native(Arc::new(|_: &Context, _: &[Value]| Ok(Value::I64(0)))),
         };
         assert!(matches!(
             prepare(vec![rest("a", "/a"), sse]),
@@ -203,7 +204,7 @@ mod tests {
                 binding:
                     Binding::Stream(
                         Arc::new(
-                            |_: &[Value]| -> Result<
+                            |_: &Context, _: &[Value]| -> Result<
                                 crate::server::endpoint::ValueStream,
                                 crate::server::endpoint::HandlerError,
                             > { Ok(Box::new(std::iter::empty())) },
@@ -231,21 +232,24 @@ mod tests {
                 method: Method::POST,
                 url: "/id".into(),
             },
-            binding: Binding::Native(Arc::new(|args: &[Value]| Ok(args[0].clone()))),
+            binding: Binding::Native(Arc::new(|_: &Context, args: &[Value]| Ok(args[0].clone()))),
         }])
         .unwrap();
         let endpoint = &endpoints[0];
 
         assert_eq!(
-            endpoint.call(vec![Value::I64(7)]).await.unwrap(),
+            endpoint
+                .call(Context::default(), vec![Value::I64(7)])
+                .await
+                .unwrap(),
             Value::I64(7)
         );
         assert!(matches!(
-            endpoint.call(vec![Value::Bool(true)]).await,
+            endpoint.call(Context::default(), vec![Value::Bool(true)]).await,
             Err(EngineError::Input(_))
         ));
         assert!(matches!(
-            endpoint.call(vec![]).await,
+            endpoint.call(Context::default(), vec![]).await,
             Err(EngineError::Decode(_))
         ));
     }

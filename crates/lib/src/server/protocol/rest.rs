@@ -6,8 +6,8 @@ use axum::routing::{MethodFilter, on};
 use axum::{Json, Router};
 use serde_json::Value as JsonValue;
 
-use crate::server::endpoint::Access;
 use crate::server::endpoint::engine::{EngineError, RegisteredEndpoint};
+use crate::server::endpoint::{Access, Context};
 use crate::server::wire::{json, request};
 
 pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
@@ -26,10 +26,11 @@ pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
         &url,
         on(
             filter,
-            move |Path(path): Path<HashMap<String, String>>,
+            move |headers: axum::http::HeaderMap,
+                  Path(path): Path<HashMap<String, String>>,
                   Query(query): Query<HashMap<String, String>>,
                   body: Option<Json<JsonValue>>| async move {
-                handle(&endpoint, path, query, body.map(|Json(b)| b)).await
+                handle(&endpoint, headers, path, query, body.map(|Json(b)| b)).await
             },
         ),
     )
@@ -37,12 +38,14 @@ pub fn mount(router: Router, endpoint: Arc<RegisteredEndpoint>) -> Router {
 
 async fn handle(
     endpoint: &RegisteredEndpoint,
+    headers: axum::http::HeaderMap,
     path: HashMap<String, String>,
     query: HashMap<String, String>,
     body: Option<JsonValue>,
 ) -> Result<Json<JsonValue>, EngineError> {
+    let ctx = Context::extract(&headers, &query);
     let args = request::collect_args(&endpoint.signature, &path, &query, body.as_ref())?;
-    let output = endpoint.call(args).await?;
+    let output = endpoint.call(ctx, args).await?;
     Ok(Json(json::encode(&output)))
 }
 
@@ -78,7 +81,7 @@ mod tests {
                 method: http::Method::POST,
                 url: "/add".into(),
             },
-            binding: Binding::Native(Arc::new(|args: &[Value]| match args {
+            binding: Binding::Native(Arc::new(|_: &Context, args: &[Value]| match args {
                 [Value::I64(a), Value::I64(b)] => Ok(Value::I64(a + b)),
                 _ => Err("bad args".into()),
             })),
@@ -137,7 +140,7 @@ mod tests {
                 method: http::Method::GET,
                 url: "/things/{id}".into(),
             },
-            binding: Binding::Native(Arc::new(|args: &[Value]| match args {
+            binding: Binding::Native(Arc::new(|_: &Context, args: &[Value]| match args {
                 [Value::I64(7)] => Err("no seven".into()),
                 [Value::I64(n)] => Ok(Value::I64(*n)),
                 _ => unreachable!(),
@@ -173,7 +176,7 @@ mod tests {
                 method: http::Method::GET,
                 url: "/missing".into(),
             },
-            binding: Binding::Native(Arc::new(|_: &[Value]| {
+            binding: Binding::Native(Arc::new(|_: &Context, _: &[Value]| {
                 Err(crate::server::endpoint::with_status(
                     StatusCode::NOT_FOUND,
                     "no such thing",

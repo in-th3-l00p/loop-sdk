@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use tokio::sync::mpsc;
 
-use super::Endpoint;
+use super::{Context, Endpoint};
 use crate::schema::Value;
 
 pub struct Engine {
@@ -27,16 +27,22 @@ impl Engine {
         self.endpoints.iter()
     }
 
-    pub async fn call(&self, name: &str, args: Vec<Value>) -> Result<Value, EngineError> {
-        self.lookup(name)?.call(args).await
+    pub async fn call(
+        &self,
+        name: &str,
+        ctx: Context,
+        args: Vec<Value>,
+    ) -> Result<Value, EngineError> {
+        self.lookup(name)?.call(ctx, args).await
     }
 
     pub async fn stream(
         &self,
         name: &str,
+        ctx: Context,
         args: Vec<Value>,
     ) -> Result<mpsc::Receiver<Result<Value, EngineError>>, EngineError> {
-        self.lookup(name)?.stream(args).await
+        self.lookup(name)?.stream(ctx, args).await
     }
 
     fn lookup(&self, name: &str) -> Result<&Arc<RegisteredEndpoint>, EngineError> {

@@ -1,9 +1,11 @@
 mod binding;
+mod context;
 #[cfg(feature = "engine")]
 pub mod engine;
 mod output;
 
 pub use binding::{Binding, Handler, HandlerError, Source, ValueStream, status_of, with_status};
+pub use context::{Context, FromContext};
 pub use http::{Method, StatusCode};
 pub use output::{IntoHandlerOutput, StreamOutput};
 use serde::{Deserialize, Serialize};
