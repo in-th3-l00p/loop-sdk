@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>loopboard</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>loop<span>board</span></h1>
+    <div id="who" class="who"></div>
+  </header>
+
+  <main>
+    <!-- login: two doors into the same account system -->
+    <section id="login" class="login hidden">
+      <div class="card">
+        <h2>email</h2>
+        <p class="hint">a one-time code (printed on the dev server console) — you get an embedded wallet, custodied by the app.</p>
+        <div id="email-step-1">
+          <input id="email" type="email" placeholder="ada@example.com" />
+          <button id="send-code">send code</button>
+        </div>
+        <div id="email-step-2" class="hidden">
+          <input id="code" inputmode="numeric" placeholder="6-digit code" />
+          <button id="verify-code">sign in</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>wallet</h2>
+        <p class="hint">sign-in-with-ethereum — self-custodial, your key never leaves your wallet.</p>
+        <button id="connect">connect wallet</button>
+      </div>
+    </section>
+
+    <!-- the app -->
+    <section id="app" class="app hidden">
+      <div class="column main-col">
+        <form id="composer">
+          <textarea id="text" maxlength="280" placeholder="say gm to the board…"></textarea>
+          <button type="submit">post</button>
+        </form>
+        <div id="posts"></div>
+      </div>
+      <aside class="column side-col">
+        <div class="card" id="wallet-card">
+          <h2>your wallet</h2>
+          <div id="wallet"></div>
+          <button id="refresh-wallet">refresh on-chain</button>
+        </div>
+        <div class="card">
+          <h2>leaderboard</h2>
+          <ol id="leaderboard"></ol>
+        </div>
+        <button id="logout" class="ghost">log out</button>
+      </aside>
+    </section>
+  </main>
+
+  <div id="toasts"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

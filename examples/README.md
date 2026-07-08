@@ -1,6 +1,6 @@
 # examples
 
-Seven loop projects showcasing the SDK's initial feature set. Each is a
+Eight loop projects showcasing the SDK's initial feature set. Each is a
 standalone project managed by the loop CLI — `cd` into one and run `loop dev`
 (they all bind port 3000, so run one at a time).
 
@@ -13,3 +13,4 @@ standalone project managed by the loop CLI — `cd` into one and run `loop dev`
 | [erc20-dashboard](erc20-dashboard/)  | ethereum SDK: chain primitives, `#[contract]` bindings, event feeds  |
 | [guarded-notes](guarded-notes/)      | auth: `User` guards, `Option<User>`, email/password + one-time codes |
 | [siwe-vault](siwe-vault/)            | auth + eth: SIWE self-custodial login, embedded wallets, `user.wallet()` |
+| [loopboard](loopboard/)              | **the full stack**: every pillar + a served frontend, atomic tipping, live board |
