@@ -59,16 +59,24 @@ impl Signer for Treasury {
     }
 
     fn sign(&self, tx: &TxRequest) -> Result<Vec<u8>, EthError> {
-        let mut unsigned =
-            NetworkTransactionBuilder::<Ethereum>::build_unsigned(tx.0.clone())
-                .map_err(|e| EthError::Tx(format!("incomplete transaction: {e}")))?;
-        let signature = self
-            .signer
-            .sign_transaction_sync(&mut unsigned)
-            .map_err(|e| EthError::Tx(format!("signing failed: {e}")))?;
-        let envelope: alloy::consensus::TxEnvelope = unsigned.into_signed(signature).into();
-        Ok(envelope.encoded_2718())
+        sign_request(&self.signer, tx)
     }
+}
+
+/// Fill-agnostic local signing: typed tx from the filled request, secp256k1
+/// signature, eip-2718 raw bytes. Shared by the treasury and by the auth
+/// module's embedded wallets.
+pub(crate) fn sign_request(
+    signer: &PrivateKeySigner,
+    tx: &TxRequest,
+) -> Result<Vec<u8>, EthError> {
+    let mut unsigned = NetworkTransactionBuilder::<Ethereum>::build_unsigned(tx.0.clone())
+        .map_err(|e| EthError::Tx(format!("incomplete transaction: {e}")))?;
+    let signature = signer
+        .sign_transaction_sync(&mut unsigned)
+        .map_err(|e| EthError::Tx(format!("signing failed: {e}")))?;
+    let envelope: alloy::consensus::TxEnvelope = unsigned.into_signed(signature).into();
+    Ok(envelope.encoded_2718())
 }
 
 // never expose the private key, not even in debug output

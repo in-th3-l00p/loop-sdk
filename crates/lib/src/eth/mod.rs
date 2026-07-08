@@ -26,6 +26,8 @@ pub use global::{
     try_treasury,
 };
 pub use signer::{Signer, Treasury, generate_key};
+#[cfg(feature = "auth")]
+pub(crate) use signer::sign_request;
 pub use tx::{TxHandle, TxRequest};
 pub use types::{Address, Block, IntoAddress, Receipt, U256, Wei};
 

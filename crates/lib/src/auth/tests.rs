@@ -43,6 +43,9 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 fn test_config() -> Config {
     let mut config = Config::new(vec![Provider::EmailPassword, Provider::EmailOtp]);
     config.session_ttl = Duration::from_secs(3600);
+    // wallet tests need a master secret; embedded stays off so email flows
+    // don't auto-provision wallets in the shared database
+    config.secret = Some("42".repeat(32));
     config
 }
 
@@ -238,4 +241,215 @@ fn user_params_resolve_sessions_through_from_context() {
     assert!(optional.is_none());
     let optional = Option::<super::User>::from_context(&Context::with_token(&token)).unwrap();
     assert_eq!(optional.unwrap().id(), user.id());
+}
+
+#[cfg(feature = "eth")]
+mod wallets {
+    use super::*;
+    use crate::auth::wallet::{decrypt_key, encrypt_key};
+    use crate::auth::{WalletKind, wallet};
+    use crate::eth::Signer as _;
+
+    /// A router that also mounts the wallet routes.
+    fn wallet_router() -> Router {
+        setup();
+        let mut config = test_config();
+        config.providers.push(Provider::Wallet);
+        let engine =
+            crate::server::endpoint::engine::Engine::new(crate::auth::endpoints(&config)).unwrap();
+        crate::server::router(&engine)
+    }
+
+    /// Signs the SIWE message like a browser wallet would.
+    fn personal_sign(signer: &alloy::signers::local::PrivateKeySigner, message: &str) -> String {
+        use alloy::signers::SignerSync;
+        let signature = signer.sign_message_sync(message.as_bytes()).unwrap();
+        crate::auth::crypto::to_hex(&signature.as_bytes())
+    }
+
+    #[test]
+    fn embedded_keys_roundtrip_and_bind_to_their_user() {
+        setup();
+        let encrypted = encrypt_key("user-a", "aabbccdd").unwrap();
+        assert_eq!(decrypt_key("user-a", &encrypted).unwrap(), "aabbccdd");
+        // the per-user derivation means another user's id cannot open it
+        assert!(decrypt_key("user-b", &encrypted).is_err());
+        // fresh nonces: same plaintext, different ciphertext
+        assert_ne!(encrypted, encrypt_key("user-a", "aabbccdd").unwrap());
+    }
+
+    #[test]
+    fn embedded_wallets_sign_and_export_linked_wallets_refuse() {
+        setup();
+        let row = crate::auth::store::create_user(None, None).unwrap();
+        let embedded = wallet::create_embedded(&row.id).unwrap();
+        assert_eq!(embedded.kind(), WalletKind::Embedded);
+
+        // EIP-191 signature recovers to the wallet's own address
+        let signature = embedded.sign_message(b"prove it").unwrap();
+        let recovered = alloy::primitives::Signature::from_raw(&signature)
+            .unwrap()
+            .recover_address_from_msg(b"prove it")
+            .unwrap();
+        assert_eq!(recovered, embedded.address().0);
+
+        // export hands back a key that re-derives the same address
+        let exported = embedded.export().unwrap();
+        let signer: alloy::signers::local::PrivateKeySigner = exported.parse().unwrap();
+        assert_eq!(signer.address(), embedded.address().0);
+
+        // a linked wallet must refuse server-side signing, loudly
+        let external = alloy::signers::local::PrivateKeySigner::random();
+        let user_id = crate::auth::UserId(row.id.clone());
+        wallet::link(&user_id, crate::eth::Address(external.address())).unwrap();
+        let linked = crate::auth::users()
+            .find(user_id)
+            .unwrap()
+            .unwrap()
+            .wallets()
+            .into_iter()
+            .find(|w| w.kind() == WalletKind::Linked)
+            .unwrap();
+        let request = crate::eth::TxRequest(Default::default());
+        let error = linked.sign(&request).unwrap_err();
+        assert!(error.to_string().contains("self-custodial"), "{error}");
+        assert!(linked.export().is_err());
+    }
+
+    #[test]
+    fn siwe_logs_in_registers_and_links() {
+        let app = wallet_router();
+        runtime().block_on(async {
+            let signer = alloy::signers::local::PrivateKeySigner::random();
+            let address = crate::eth::Address(signer.address()).to_string();
+
+            // nonce → sign → verify: registers on first use
+            let (status, issued) = send(
+                app.clone(),
+                get(&format!("/auth/wallet/nonce?address={address}"), None),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "{issued}");
+            let message = issued["message"].as_str().unwrap();
+            assert!(message.contains(&address), "siwe message names the signer");
+            let body = json!({
+                "address": address,
+                "signature": personal_sign(&signer, message),
+                "nonce": issued["nonce"],
+            });
+            let (status, session) =
+                send(app.clone(), post("/auth/wallet/verify", body, None)).await;
+            assert_eq!(status, StatusCode::OK, "{session}");
+            assert_eq!(session["user"]["wallets"][0]["kind"], json!("linked"));
+            assert_eq!(session["user"]["wallets"][0]["address"], json!(address));
+            let first_user = session["user"]["id"].clone();
+
+            // logging in again with the same wallet reuses the account
+            let (_, issued) = send(
+                app.clone(),
+                get(&format!("/auth/wallet/nonce?address={address}"), None),
+            )
+            .await;
+            let message = issued["message"].as_str().unwrap();
+            let body = json!({
+                "address": address,
+                "signature": personal_sign(&signer, message),
+                "nonce": issued["nonce"],
+            });
+            let (status, again) = send(app.clone(), post("/auth/wallet/verify", body, None)).await;
+            assert_eq!(status, StatusCode::OK);
+            assert_eq!(again["user"]["id"], first_user);
+
+            // a nonce is single-use
+            let body = json!({
+                "address": address,
+                "signature": personal_sign(&signer, message),
+                "nonce": issued["nonce"],
+            });
+            let (status, _) = send(app.clone(), post("/auth/wallet/verify", body, None)).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+            // with a live session, verify links instead of logging in
+            let credentials = json!({"email": "linker@example.com", "password": "hunter2222"});
+            let (_, registered) = send(app.clone(), post("/auth/register", credentials, None)).await;
+            let token = registered["token"].as_str().unwrap().to_string();
+            let linker = alloy::signers::local::PrivateKeySigner::random();
+            let linker_address = crate::eth::Address(linker.address()).to_string();
+            let (_, issued) = send(
+                app.clone(),
+                get(&format!("/auth/wallet/nonce?address={linker_address}"), None),
+            )
+            .await;
+            let message = issued["message"].as_str().unwrap();
+            let body = json!({
+                "address": linker_address,
+                "signature": personal_sign(&linker, message),
+                "nonce": issued["nonce"],
+            });
+            let (status, linked) =
+                send(app.clone(), post("/auth/wallet/verify", body, Some(&token))).await;
+            assert_eq!(status, StatusCode::OK, "{linked}");
+            assert_eq!(linked["user"]["email"], json!("linker@example.com"));
+            assert_eq!(
+                linked["user"]["wallets"][0]["address"],
+                json!(linker_address)
+            );
+
+            // and someone else's session cannot claim that same wallet
+            let thief = json!({"email": "thief@example.com", "password": "hunter2222"});
+            let (_, registered) = send(app.clone(), post("/auth/register", thief, None)).await;
+            let thief_token = registered["token"].as_str().unwrap().to_string();
+            let (_, issued) = send(
+                app.clone(),
+                get(&format!("/auth/wallet/nonce?address={linker_address}"), None),
+            )
+            .await;
+            let message = issued["message"].as_str().unwrap();
+            let body = json!({
+                "address": linker_address,
+                "signature": personal_sign(&linker, message),
+                "nonce": issued["nonce"],
+            });
+            let (status, _) = send(
+                app.clone(),
+                post("/auth/wallet/verify", body, Some(&thief_token)),
+            )
+            .await;
+            assert_eq!(status, StatusCode::CONFLICT);
+        });
+    }
+
+    #[test]
+    fn siwe_rejects_forged_and_mismatched_signatures() {
+        let app = wallet_router();
+        runtime().block_on(async {
+            let signer = alloy::signers::local::PrivateKeySigner::random();
+            let address = crate::eth::Address(signer.address()).to_string();
+            let (_, issued) = send(
+                app.clone(),
+                get(&format!("/auth/wallet/nonce?address={address}"), None),
+            )
+            .await;
+            let message = issued["message"].as_str().unwrap();
+
+            // signed by a different key
+            let imposter = alloy::signers::local::PrivateKeySigner::random();
+            let body = json!({
+                "address": address,
+                "signature": personal_sign(&imposter, message),
+                "nonce": issued["nonce"],
+            });
+            let (status, _) = send(app.clone(), post("/auth/wallet/verify", body, None)).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+            // unknown nonce
+            let body = json!({
+                "address": address,
+                "signature": personal_sign(&signer, message),
+                "nonce": "deadbeef",
+            });
+            let (status, _) = send(app.clone(), post("/auth/wallet/verify", body, None)).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED);
+        });
+    }
 }
