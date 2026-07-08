@@ -4,25 +4,21 @@ import { Callout, Code, DocTitle, H2, Lead, P, Table, Ul, Li } from "@/component
 export default function Auth() {
   return (
     <article>
-      <DocTitle ornament="❦ blueprint" planned>
-        authentication
-      </DocTitle>
+      <DocTitle ornament="❦ identity">authentication</DocTitle>
       <Lead>
         privy-grade identity as configuration: email &amp; password, email one-time
         codes, and ethereum wallets — with an embedded wallet manager so every user
         can hold keys, even the ones who signed up with an email.
       </Lead>
 
-      <Callout tone="planned">
-        this page is a design document. the API below is settled in shape but not yet
-        implemented — names may drift before it ships.
-      </Callout>
-
       <H2>configuration</H2>
       <P>
-        authentication is declared in the manifest. enabling it mounts the{" "}
-        <Code>/auth/*</Code> routes, provisions the session store, and — when the
-        wallet manager is on — creates an embedded wallet for every new user.
+        authentication is declared in the manifest (and needs a{" "}
+        <Code>[database]</Code>, where sessions and users live). enabling it mounts
+        the auth routes, provisions the session store, and — when the wallet manager
+        is on — creates an embedded wallet for every new user. enable the{" "}
+        <Code>auth</Code> cargo feature; the wallet provider additionally needs{" "}
+        <Code>eth</Code>.
       </P>
       <CodeBlock
         language="toml"
@@ -30,6 +26,7 @@ export default function Auth() {
         code={`[auth]
 providers = ["email-password", "email-otp", "wallet"]
 session_ttl = "30d"
+secret = "env:LOOP_AUTH_SECRET"   # for embedded wallets; loop auth secret new
 
 [auth.otp]
 from = "login@my-api.dev"
@@ -40,6 +37,12 @@ ttl = "10m"
 chain_id = 1
 embedded = true`}
       />
+      <P>
+        one-time codes are delivered through a pluggable <Code>Mailer</Code>; the
+        default prints the code to the server console, which is exactly what local
+        development wants. register a real provider with{" "}
+        <Code>lib::auth::set_mailer(...)</Code> before <Code>lib::server::run()</Code>.
+      </P>
 
       <H2>mounted routes</H2>
       <Table
@@ -80,9 +83,11 @@ embedded = true`}
         ]}
       />
       <P>
-        sessions travel as bearer tokens. every flow returns the same shape:{" "}
+        sessions travel as bearer tokens (with a <Code>?token=</Code> query fallback
+        for EventSource and browser WebSockets, which cannot set headers). every
+        session-returning flow answers the same shape:{" "}
         <Code>{`{ "token": ..., "user": { "id": ..., "email": ..., "wallets": [...] } }`}</Code>
-        .
+        . tokens are stored hashed, so a leaked table cannot be replayed.
       </P>
 
       <H2>guarding endpoints</H2>
@@ -93,15 +98,14 @@ embedded = true`}
         your code runs. <Code>Option&lt;User&gt;</Code> makes it optional.
       </P>
       <CodeBlock
-        title="planned — user injection"
+        title="user injection"
         code={`use lib::prelude::*;
-use lib::auth::User;
 
 #[rest(get, "/me")]
 fn me(user: User) -> Profile {
     Profile {
-        email: user.email(),
-        address: user.wallet().address(),
+        id: user.id().to_string(),
+        email: user.email().unwrap_or_default(),
     }
 }
 
@@ -113,14 +117,19 @@ fn feed(viewer: Option<User>) -> Vec<Post> {
     }
 }`}
       />
+      <P>
+        detection is by type name, so <Code>User</Code> is a reserved parameter type
+        in endpoint signatures (and <Code>token</Code> a reserved query name).
+        context parameters never appear in the endpoint&apos;s wire schema.
+      </P>
 
       <H2>the user</H2>
       <CodeBlock
-        title="planned — lib::auth surface"
+        title="lib::auth surface"
         code={`impl User {
     pub fn id(&self) -> UserId;
     pub fn email(&self) -> Option<String>;
-    pub fn wallet(&self) -> Wallet;
+    pub fn wallet(&self) -> Wallet;          // primary (first) wallet
     pub fn wallets(&self) -> Vec<Wallet>;
     pub fn link_wallet(&self, address: Address) -> Result<(), AuthError>;
 }
@@ -142,32 +151,33 @@ impl Users {
         app, exportable when they are ready to self-custody.
       </P>
       <CodeBlock
-        title="planned — wallets"
+        title="wallets"
         code={`impl Wallet {
     pub fn address(&self) -> Address;
-    pub fn kind(&self) -> WalletKind;
-    pub fn sign_message(&self, message: &[u8]) -> Result<Signature, WalletError>;
-    pub fn send(&self, tx: Transaction) -> Result<TxHandle, WalletError>;
-    pub fn export(&self) -> Result<EncryptedKey, WalletError>;
+    pub fn kind(&self) -> WalletKind;        // Embedded | Linked
+    pub fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, AuthError>;
+    pub fn export(&self) -> Result<String, AuthError>;   // 0x-hex key, embedded only
 }
 
-pub enum WalletKind {
-    Embedded,
-    Linked,
-}`}
+// Wallet implements eth::Signer, so sending is the contract builder:
+usdc.transfer(to, amount).from(user.wallet()).send()?`}
       />
       <Ul>
         <Li>
-          embedded keys live encrypted at rest in the project database, unlocked per
-          request — never written to logs, never serialized into a schema value
+          embedded keys live encrypted at rest in the project database
+          (chacha20-poly1305 under a per-user key derived from{" "}
+          <Code>LOOP_AUTH_SECRET</Code>), unlocked per request — never written to
+          logs, never serialized into a schema value
         </Li>
         <Li>
-          <Code>export()</Code> is a deliberate, auditable action gated by fresh
-          re-authentication
+          <Code>export()</Code> is a deliberate, auditable action — call it only from
+          flows that just re-authenticated the user
         </Li>
         <Li>
-          signing over a linked wallet round-trips through the client; signing over an
-          embedded wallet happens server-side — one <Code>Wallet</Code> api either way
+          signing over an embedded wallet happens server-side; a linked wallet is
+          self-custodial, so server-side signing refuses with a clear error and the
+          client signs in the user&apos;s own wallet app — one <Code>Wallet</Code>{" "}
+          api either way
         </Li>
       </Ul>
 
@@ -179,8 +189,10 @@ pub enum WalletKind {
         >
           sign-in-with-ethereum (EIP-4361)
         </a>{" "}
-        — the nonce route issues the message, the verify route checks the signature
-        and recovers the address.
+        — the nonce route issues the message (single-use, 10 minutes), the verify
+        route checks the signature and recovers the address. verifying with a live
+        session <em>links</em> the proven wallet to that account; without one it
+        logs in, registering on first use.
       </Callout>
     </article>
   );

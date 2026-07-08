@@ -118,9 +118,12 @@ fn heads() -> Result<impl Iterator<Item = Block>, HandlerError> {
           airdrops, sponsored transactions
         </Li>
         <Li>
-          <Code>user.wallet()</Code> <em>(ships with the auth module)</em> — the
-          authenticated user&apos;s wallet from the wallet manager; embedded wallets
-          sign server-side, linked wallets round-trip to the client
+          <Code>user.wallet()</Code> — the authenticated user&apos;s wallet from the{" "}
+          <a href="/docs/auth" className="text-brand-soft hover:underline">
+            auth module
+          </a>
+          ; embedded wallets sign server-side, linked wallets are self-custodial and
+          sign client-side
         </Li>
         <Li>
           every wallet implements one <Code>Signer</Code> trait, so a handler can take

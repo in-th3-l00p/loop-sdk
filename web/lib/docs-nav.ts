@@ -20,6 +20,7 @@ export const docsNav: DocSection[] = [
       { href: "/docs/schemas", title: "schemas & validation" },
       { href: "/docs/endpoints", title: "endpoints" },
       { href: "/docs/database", title: "database" },
+      { href: "/docs/auth", title: "authentication" },
       { href: "/docs/eth", title: "ethereum sdk" },
       { href: "/docs/cli", title: "cli & manifest" },
     ],
@@ -28,7 +29,6 @@ export const docsNav: DocSection[] = [
     number: "№ 002",
     title: "blueprints",
     links: [
-      { href: "/docs/auth", title: "authentication", planned: true },
       { href: "/docs/payments", title: "payments & subscriptions", planned: true },
     ],
   },
