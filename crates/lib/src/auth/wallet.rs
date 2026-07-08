@@ -31,7 +31,7 @@ pub enum WalletKind {
 }
 
 impl WalletKind {
-    pub(crate) fn as_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             WalletKind::Embedded => "embedded",
             WalletKind::Linked => "linked",
@@ -120,17 +120,20 @@ impl Signer for Wallet {
     }
 
     fn sign(&self, tx: &TxRequest) -> Result<Vec<u8>, EthError> {
+        self.ready()?;
+        let signer = self.signer().map_err(|e| EthError::Tx(e.to_string()))?;
+        crate::eth::sign_request(&signer, tx)
+    }
+
+    fn ready(&self) -> Result<(), EthError> {
         match self.kind {
+            WalletKind::Embedded => Ok(()),
             WalletKind::Linked => Err(EthError::Tx(
                 "this wallet is self-custodial: its key never leaves the user, so the \
                  transaction must be signed client-side. use an embedded wallet or \
                  eth::treasury() for server-sent transactions"
                     .into(),
             )),
-            WalletKind::Embedded => {
-                let signer = self.signer().map_err(|e| EthError::Tx(e.to_string()))?;
-                crate::eth::sign_request(&signer, tx)
-            }
         }
     }
 }

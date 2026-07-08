@@ -34,6 +34,7 @@ pub(crate) async fn send(
             "transaction needs a signer — name one with .from(eth::treasury())".into(),
         ));
     };
+    signer.ready()?;
     let eth = super::global::get();
     let sender = signer.address();
     let data = super::abi::encode_call(signature, args)?;

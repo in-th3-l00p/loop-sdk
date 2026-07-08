@@ -22,6 +22,13 @@ pub trait Signer: Send + Sync {
     /// Signs a fully-filled transaction, returning the raw bytes for
     /// `eth_sendRawTransaction`.
     fn sign(&self, tx: &TxRequest) -> Result<Vec<u8>, EthError>;
+
+    /// Whether this signer can sign at all, checked before any rpc work —
+    /// a self-custodial wallet refuses here rather than after gas
+    /// estimation has already run.
+    fn ready(&self) -> Result<(), EthError> {
+        Ok(())
+    }
 }
 
 /// Lets `.from(eth::treasury())` work directly with the global accessor.
@@ -31,6 +38,9 @@ impl<T: Signer> Signer for &'static T {
     }
     fn sign(&self, tx: &TxRequest) -> Result<Vec<u8>, EthError> {
         (**self).sign(tx)
+    }
+    fn ready(&self) -> Result<(), EthError> {
+        (**self).ready()
     }
 }
 
@@ -50,6 +60,15 @@ impl Treasury {
 
     pub fn address(&self) -> Address {
         Address(self.signer.address())
+    }
+
+    /// Signs an EIP-191 personal message, returning the 65-byte signature.
+    pub fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, EthError> {
+        use alloy::signers::SignerSync;
+        self.signer
+            .sign_message_sync(message)
+            .map(|signature| signature.as_bytes().to_vec())
+            .map_err(|e| EthError::Tx(format!("message signing failed: {e}")))
     }
 }
 

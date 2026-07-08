@@ -1,0 +1,10 @@
+name = "guarded-notes"
+
+[dev]
+port = 3000
+
+[database]
+
+[auth]
+providers = ["email-password", "email-otp"]
+session_ttl = "30d"
