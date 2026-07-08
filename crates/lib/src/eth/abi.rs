@@ -226,6 +226,13 @@ pub fn encode_call(signature: &str, args: Vec<AbiParam>) -> Result<Vec<u8>, EthE
 /// Decodes the return data of a call whose single output has the given
 /// canonical type.
 pub fn decode_return(sol_type: &str, data: &[u8]) -> Result<AbiParam, EthError> {
+    // an empty buffer decodes as an opaque "buffer overrun"; the usual cause
+    // is a call to an address with no contract, so say so plainly
+    if data.is_empty() {
+        return Err(EthError::Abi(format!(
+            "empty return data — expected {sol_type} (no contract at the target address?)"
+        )));
+    }
     let ty = DynSolType::parse(&format!("({sol_type})"))
         .map_err(|e| EthError::Abi(format!("malformed return type {sol_type:?}: {e}")))?;
     let value = ty
@@ -424,6 +431,15 @@ mod tests {
         let encoded = encode_call("f(string)", vec!["USDC".to_string().into_abi()]).unwrap();
         let decoded = decode_return("string", &encoded[4..]).unwrap();
         assert_eq!(decoded, AbiParam::Str("USDC".into()));
+    }
+
+    #[test]
+    fn empty_return_data_is_a_clear_error() {
+        let err = decode_return("uint256", &[]).unwrap_err();
+        assert!(
+            err.to_string().contains("empty return data"),
+            "unexpected message: {err}"
+        );
     }
 
     #[test]

@@ -7,6 +7,7 @@ pub enum EthError {
     Rpc(String),
     Parse(String),
     Abi(String),
+    Call(String),
     Tx(String),
     Unsupported(String),
 }
@@ -19,6 +20,7 @@ impl fmt::Display for EthError {
             EthError::Rpc(message) => write!(f, "rpc call failed: {message}"),
             EthError::Parse(message) => write!(f, "parse failed: {message}"),
             EthError::Abi(message) => write!(f, "abi error: {message}"),
+            EthError::Call(message) => write!(f, "contract call failed: {message}"),
             EthError::Tx(message) => write!(f, "transaction failed: {message}"),
             EthError::Unsupported(message) => write!(f, "unsupported: {message}"),
         }

@@ -311,11 +311,20 @@ struct OnchainWallet {
 fn wallet(user: User) -> Result<OnchainWallet, HandlerError> {
     let wallet = user.wallet();
     let address = wallet.address();
+    // usdc only resolves where the token is deployed (mainnet or a mainnet
+    // fork). on a bare devnet or a testnet there is no contract at that
+    // address, so treat a no-contract call as a zero balance rather than
+    // failing the whole panel — the native eth balance always resolves.
+    let usdc = match Erc20::at(USDC).balance_of(address).call() {
+        Ok(balance) => balance,
+        Err(eth::EthError::Call(_)) => U256::from(0u64),
+        Err(other) => return Err(other.into()),
+    };
     Ok(OnchainWallet {
         address: address.to_string(),
         kind: wallet.kind().as_str().to_string(),
         eth: eth::balance(address)?,
-        usdc: Erc20::at(USDC).balance_of(address).call()?,
+        usdc,
     })
 }
 

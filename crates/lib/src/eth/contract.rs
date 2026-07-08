@@ -60,6 +60,17 @@ impl<T: AbiType> CallBuilder<T> {
         if self.output.is_empty() {
             return T::from_abi(AbiParam::Unit);
         }
+        // a non-reverting call that returns no data means the address holds no
+        // contract on this chain — decoding it would surface as an opaque
+        // "buffer overrun", so name the real cause instead
+        if returned.is_empty() {
+            return Err(EthError::Call(format!(
+                "{} returned no data — there is no contract at that address on chain {} \
+                 (is ETH_RPC_URL pointed at the right network?)",
+                self.address,
+                eth.chain_id(),
+            )));
+        }
         T::from_abi(abi::decode_return(self.output, &returned)?)
     }
 }
