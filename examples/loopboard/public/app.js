@@ -113,6 +113,17 @@ $("verify-code").onclick = async () => {
   }
 };
 
+// turn an EIP-1193 provider error into something a human can act on: name
+// the step that failed and surface the wallet's own code/message (4001 is
+// the standard user-rejected code; -32603 is the wallet's generic internal
+// error, usually a wrong network or a stuck pending request).
+function connectError(step, e) {
+  if (e?.code === 4001) return "you rejected the request in your wallet";
+  const detail = e?.data?.message || e?.message || String(e);
+  const code = e?.code != null ? ` (code ${e.code})` : "";
+  return `${step} failed: ${detail}${code}`;
+}
+
 // sign-in-with-ethereum door (EIP-1193 + EIP-4361 + personal_sign)
 $("connect").onclick = async () => {
   const provider = await walletProvider();
@@ -121,6 +132,7 @@ $("connect").onclick = async () => {
     return;
   }
   state.provider = provider;
+  let step = "connecting to your wallet";
   try {
     const accounts = await provider.request({ method: "eth_requestAccounts" });
     const account = accounts && accounts[0];
@@ -128,16 +140,17 @@ $("connect").onclick = async () => {
       toast("wallet returned no account — is it unlocked?", true);
       return;
     }
+    step = "requesting a sign-in nonce";
     const issued = await api(`/auth/wallet/nonce?address=${account}`);
-    const hexMessage =
-      "0x" +
-      [...new TextEncoder().encode(issued.message)]
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
+    // sign the EIP-4361 message as-is: personal_sign takes a utf-8 string and
+    // the server recovers over the same bytes. (a hex payload also works but
+    // some wallets choke on it — the plain string is the SIWE-standard path.)
+    step = "signing the sign-in message";
     const signature = await provider.request({
       method: "personal_sign",
-      params: [hexMessage, account],
+      params: [issued.message, account],
     });
+    step = "verifying the signature";
     const session = await api("/auth/wallet/verify", {
       address: account,
       signature,
@@ -145,10 +158,8 @@ $("connect").onclick = async () => {
     });
     await establish(session);
   } catch (e) {
-    // 4001 is the EIP-1193 user-rejected code; anything else is a real fault
-    console.error("wallet connect failed", e);
-    const reason = e?.code === 4001 ? "signature request rejected" : e?.message || String(e);
-    toast(reason, true);
+    console.error(`wallet connect failed while ${step}`, e);
+    toast(connectError(step, e), true);
   }
 };
 
