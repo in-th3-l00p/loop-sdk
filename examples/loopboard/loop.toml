@@ -1,0 +1,17 @@
+name = "loopboard"
+
+[dev]
+port = 3000
+
+[database]
+
+[eth]
+rpc = "env:ETH_RPC_URL"
+
+[auth]
+providers = ["email-otp", "wallet"]
+session_ttl = "30d"
+secret = "env:LOOP_AUTH_SECRET"
+
+[auth.wallet]
+embedded = true

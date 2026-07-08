@@ -10,6 +10,12 @@ use crate::server::endpoint::{Context, FromContext, HandlerError, StatusCode, wi
 pub struct UserId(pub(crate) String);
 
 impl UserId {
+    /// Rebuilds an id an app stored in its own tables, for
+    /// [`Users::find`] lookups.
+    pub fn new(id: impl Into<String>) -> UserId {
+        UserId(id.into())
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

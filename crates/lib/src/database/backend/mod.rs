@@ -15,7 +15,7 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// One statement of an atomic batch. A `guard` statement must affect at
 /// least one row or the whole transaction rolls back.
-pub(crate) struct AtomicStatement {
+pub struct AtomicStatement {
     pub sql: String,
     pub args: Vec<(Value, Schema)>,
     pub guard: bool,

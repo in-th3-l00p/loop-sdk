@@ -19,7 +19,7 @@ mod tests;
 
 pub use admin::{create_database, drop_database};
 pub use atomic::Atomic;
-pub use backend::{Backend, BoxFuture};
+pub use backend::{AtomicStatement, Backend, BoxFuture};
 pub use config::{Config, Driver};
 pub use connection::Database;
 pub use error::DatabaseError;
