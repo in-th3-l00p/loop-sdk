@@ -34,8 +34,14 @@ fn views_become_call_builders_and_writes_tx_builders() {
     let _decimals: CallBuilder<u32> = token.decimals();
     let _symbol: CallBuilder<String> = token.symbol();
     let _supply: CallBuilder<U256> = token.total_supply();
-    let _transfer: TxBuilder = token.transfer(holder, U256::from(1u64));
     let _approve: TxBuilder = token.approve(holder, U256::from(1u64));
+
+    // calldata for client-side signing: selector + padded args, no network
+    let transfer: TxBuilder = token.transfer(holder, U256::from(500u64));
+    assert_eq!(transfer.to(), token.address());
+    let calldata = transfer.calldata().unwrap();
+    assert!(calldata.starts_with("0xa9059cbb"), "{calldata}");
+    assert_eq!(calldata.len(), 2 + 8 + 64 + 64);
 }
 
 #[test]

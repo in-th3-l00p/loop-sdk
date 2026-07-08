@@ -3,6 +3,7 @@ CLI dev server and by compiled standalone binaries */
 
 pub mod endpoint;
 mod protocol;
+mod static_files;
 mod wire;
 
 /// Serves every endpoint declared with the loop attributes. Address and port
@@ -83,6 +84,9 @@ pub fn run() {
     }
 
     println!("listening on http://{addr}:{port}");
+    if static_files::available() {
+        println!("  serving ./{}", static_files::DIR);
+    }
     for route in routes(&engine) {
         println!("  {route}");
     }
@@ -100,11 +104,16 @@ use crate::server::endpoint::Access;
 use crate::server::endpoint::engine::{Engine, EngineError};
 
 pub fn router(engine: &Engine) -> axum::Router {
-    engine
+    let router = engine
         .endpoints()
         .fold(axum::Router::new(), |router, endpoint| {
             protocol::mount(router, endpoint.clone())
-        })
+        });
+    if static_files::available() {
+        router.fallback(static_files::serve)
+    } else {
+        router
+    }
 }
 
 pub fn routes(engine: &Engine) -> Vec<String> {

@@ -93,6 +93,19 @@ impl TxBuilder {
         self
     }
 
+    /// The contract address this call targets.
+    pub fn to(&self) -> Address {
+        self.address
+    }
+
+    /// The abi-encoded calldata of this call as 0x-hex — for handing to a
+    /// browser wallet (`eth_sendTransaction`) when the user signs
+    /// client-side instead of the server.
+    pub fn calldata(&self) -> Result<String, EthError> {
+        let data = abi::encode_call(self.signature, self.args.clone())?;
+        Ok(format!("0x{}", alloy::primitives::hex::encode(data)))
+    }
+
     pub fn value(mut self, value: Wei) -> TxBuilder {
         self.value = value;
         self
