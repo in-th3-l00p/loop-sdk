@@ -243,3 +243,88 @@ fn config_infers_driver_from_url() {
         Driver::Postgres
     );
 }
+
+async fn ledger_db() -> Database {
+    let db = Database::connect(&Config::from_url("sqlite::memory:"))
+        .await
+        .unwrap();
+    db.raw("CREATE TABLE ledger (id TEXT PRIMARY KEY, balance BIGINT NOT NULL)")
+        .await
+        .unwrap();
+    for (id, balance) in [("a", 100i64), ("b", 0)] {
+        db.query("INSERT INTO ledger (id, balance) VALUES (?, ?)")
+            .bind(id.to_string())
+            .bind(balance)
+            .execute_async()
+            .await
+            .unwrap();
+    }
+    db
+}
+
+async fn balance(db: &Database, id: &str) -> i64 {
+    db.query("SELECT balance FROM ledger WHERE id = ?")
+        .bind(id.to_string())
+        .fetch_one_async()
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn atomic_batches_commit_together() {
+    let db = ledger_db().await;
+
+    db.atomic()
+        .guard("UPDATE ledger SET balance = balance - ? WHERE id = ? AND balance >= ?")
+        .bind(30i64)
+        .bind("a".to_string())
+        .bind(30i64)
+        .query("UPDATE ledger SET balance = balance + ? WHERE id = ?")
+        .bind(30i64)
+        .bind("b".to_string())
+        .execute_async()
+        .await
+        .unwrap();
+
+    assert_eq!(balance(&db, "a").await, 70);
+    assert_eq!(balance(&db, "b").await, 30);
+}
+
+#[tokio::test]
+async fn failed_guards_roll_back_the_whole_batch() {
+    let db = ledger_db().await;
+
+    // debit exceeds the balance: the guard matches no row
+    let result = db
+        .atomic()
+        .guard("UPDATE ledger SET balance = balance - ? WHERE id = ? AND balance >= ?")
+        .bind(1000i64)
+        .bind("a".to_string())
+        .bind(1000i64)
+        .query("UPDATE ledger SET balance = balance + ? WHERE id = ?")
+        .bind(1000i64)
+        .bind("b".to_string())
+        .execute_async()
+        .await;
+
+    assert!(matches!(result, Err(DatabaseError::Guard(_))), "{result:?}");
+    // nothing moved
+    assert_eq!(balance(&db, "a").await, 100);
+    assert_eq!(balance(&db, "b").await, 0);
+}
+
+#[tokio::test]
+async fn guards_only_bite_when_their_own_statement_misses() {
+    let db = ledger_db().await;
+
+    // a later guard failing must also undo the earlier successful debit
+    let result = db
+        .atomic()
+        .query("UPDATE ledger SET balance = balance - 10 WHERE id = 'a'")
+        .guard("UPDATE ledger SET balance = balance + 10 WHERE id = 'missing'")
+        .execute_async()
+        .await;
+
+    assert!(matches!(result, Err(DatabaseError::Guard(_))));
+    assert_eq!(balance(&db, "a").await, 100, "debit must be rolled back");
+}

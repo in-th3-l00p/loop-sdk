@@ -13,6 +13,14 @@ use crate::schema::{Primitive, Schema, Value};
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
+/// One statement of an atomic batch. A `guard` statement must affect at
+/// least one row or the whole transaction rolls back.
+pub(crate) struct AtomicStatement {
+    pub sql: String,
+    pub args: Vec<(Value, Schema)>,
+    pub guard: bool,
+}
+
 pub trait Backend: Send + Sync {
     fn dialect(&self) -> Dialect;
 
@@ -28,6 +36,12 @@ pub trait Backend: Send + Sync {
         sql: &'a str,
         args: &'a [(Value, Schema)],
     ) -> BoxFuture<'a, Result<u64, DatabaseError>>;
+
+    /// Executes every statement in one transaction — all or nothing.
+    fn atomic<'a>(
+        &'a self,
+        statements: &'a [AtomicStatement],
+    ) -> BoxFuture<'a, Result<(), DatabaseError>>;
 
     fn raw<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<(), DatabaseError>>;
 

@@ -4,6 +4,7 @@ compile_error!(
 );
 
 mod admin;
+mod atomic;
 mod backend;
 mod config;
 mod connection;
@@ -17,11 +18,12 @@ mod sql;
 mod tests;
 
 pub use admin::{create_database, drop_database};
+pub use atomic::Atomic;
 pub use backend::{Backend, BoxFuture};
 pub use config::{Config, Driver};
 pub use connection::Database;
 pub use error::DatabaseError;
-pub use global::{get, init, query, try_get};
+pub use global::{atomic, get, init, query, try_get};
 #[cfg(feature = "macros")]
 pub use global::{Migrations, init_from_env, registered_migrations};
 pub use migration::{Migration, applied_versions, checksum};

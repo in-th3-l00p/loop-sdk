@@ -7,6 +7,9 @@ pub enum DatabaseError {
     Query(sqlx::Error),
     Decode(String),
     Unsupported(String),
+    /// A guard statement in an atomic batch affected no rows, so the whole
+    /// transaction rolled back.
+    Guard(String),
     Migration { name: String, message: String },
     Io(std::io::Error),
 }
@@ -19,6 +22,10 @@ impl fmt::Display for DatabaseError {
             DatabaseError::Query(source) => write!(f, "query failed: {source}"),
             DatabaseError::Decode(message) => write!(f, "row decode failed: {message}"),
             DatabaseError::Unsupported(message) => write!(f, "unsupported: {message}"),
+            DatabaseError::Guard(sql) => write!(
+                f,
+                "transaction rolled back: guard affected no rows ({sql})"
+            ),
             DatabaseError::Migration { name, message } => {
                 write!(f, "migration {name:?}: {message}")
             }

@@ -49,6 +49,16 @@ impl Database {
         self.backend.execute(&sql, args).await
     }
 
+    pub(crate) async fn atomic_values(
+        &self,
+        mut statements: Vec<backend::AtomicStatement>,
+    ) -> Result<(), DatabaseError> {
+        for statement in &mut statements {
+            statement.sql = self.dialect().placeholders(&statement.sql);
+        }
+        self.backend.atomic(&statements).await
+    }
+
     pub(crate) async fn raw(&self, sql: &str) -> Result<(), DatabaseError> {
         self.backend.raw(sql).await
     }

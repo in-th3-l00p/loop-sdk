@@ -48,6 +48,13 @@ impl Backend for PostgresBackend {
         Box::pin(execute(&self.pool, sql, args))
     }
 
+    fn atomic<'a>(
+        &'a self,
+        statements: &'a [super::AtomicStatement],
+    ) -> BoxFuture<'a, Result<(), DatabaseError>> {
+        Box::pin(atomic(&self.pool, statements))
+    }
+
     fn raw<'a>(&'a self, sql: &'a str) -> BoxFuture<'a, Result<(), DatabaseError>> {
         Box::pin(raw(&self.pool, sql))
     }
@@ -87,6 +94,24 @@ async fn execute(
         .await
         .map_err(DatabaseError::Query)?;
     Ok(result.rows_affected())
+}
+
+async fn atomic(
+    pool: &PgPool,
+    statements: &[super::AtomicStatement],
+) -> Result<(), DatabaseError> {
+    let mut tx = pool.begin().await.map_err(DatabaseError::Query)?;
+    for statement in statements {
+        let result = bind_all(sqlx::query(&statement.sql), &statement.args)?
+            .execute(&mut *tx)
+            .await
+            .map_err(DatabaseError::Query)?;
+        if statement.guard && result.rows_affected() == 0 {
+            tx.rollback().await.map_err(DatabaseError::Query)?;
+            return Err(DatabaseError::Guard(statement.sql.clone()));
+        }
+    }
+    tx.commit().await.map_err(DatabaseError::Query)
 }
 
 async fn raw(pool: &PgPool, sql: &str) -> Result<(), DatabaseError> {

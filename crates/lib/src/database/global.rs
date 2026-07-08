@@ -35,6 +35,11 @@ pub fn query(sql: impl Into<String>) -> Query<'static> {
     get().query(sql)
 }
 
+/// Starts an atomic multi-statement batch on the global database.
+pub fn atomic() -> super::Atomic<'static> {
+    get().atomic()
+}
+
 #[cfg(feature = "macros")]
 pub struct Migrations(pub fn() -> Vec<Migration>);
 

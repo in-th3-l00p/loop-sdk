@@ -107,6 +107,24 @@ fn list() -> Result<Vec<User>, HandlerError> {
         ]}
       />
 
+      <H2>transactions</H2>
+      <P>
+        <Code>database::atomic()</Code> runs a batch of statements in one
+        transaction — all or nothing. a <Code>guard</Code> statement must affect at
+        least one row, or the whole batch rolls back: the natural home for balance
+        checks and optimistic conditions.
+      </P>
+      <CodeBlock
+        code={`database::atomic()
+    .guard("UPDATE ledger SET balance = balance - ? WHERE id = ? AND balance >= ?")
+    .bind(amount).bind(&payer).bind(amount)   // no row → rollback, DatabaseError::Guard
+    .query("UPDATE ledger SET balance = balance + ? WHERE id = ?")
+    .bind(amount).bind(&payee)
+    .query("INSERT INTO transfers (payer, payee, amount) VALUES (?, ?, ?)")
+    .bind(&payer).bind(&payee).bind(amount)
+    .execute()?;`}
+      />
+
       <H2>drivers</H2>
       <Ul>
         <Li>
