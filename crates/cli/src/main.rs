@@ -5,7 +5,10 @@ mod migrations;
 mod runtime;
 
 use clap::Parser;
-use cli::{Args, Commands, DbCommands, EthCommands, MigrationCommands, WalletCommands};
+use cli::{
+    Args, AuthCommands, Commands, DbCommands, EthCommands, MigrationCommands, SecretCommands,
+    WalletCommands,
+};
 
 fn main() {
     let args = Args::parse();
@@ -30,6 +33,11 @@ fn main() {
                 WalletCommands::New => commands::eth::wallet_new(),
             },
             EthCommands::Status { dir } => commands::eth::status(&dir),
+        },
+        Commands::Auth { command } => match command {
+            AuthCommands::Secret { command } => match command {
+                SecretCommands::New => commands::auth::secret_new(),
+            },
         },
     }
 }

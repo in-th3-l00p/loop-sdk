@@ -13,6 +13,7 @@ pub struct Manifest {
     pub dev: Dev,
     pub database: Option<Database>,
     pub eth: Option<Eth>,
+    pub auth: Option<Auth>,
 }
 
 #[derive(Deserialize, Default)]
@@ -36,6 +37,28 @@ pub struct Eth {
 #[derive(Deserialize)]
 pub struct EthTreasury {
     pub key: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct Auth {
+    pub providers: Option<Vec<String>>,
+    pub session_ttl: Option<String>,
+    pub secret: Option<String>,
+    pub otp: Option<AuthOtp>,
+    pub wallet: Option<AuthWallet>,
+}
+
+#[derive(Deserialize)]
+pub struct AuthOtp {
+    pub from: Option<String>,
+    pub digits: Option<u8>,
+    pub ttl: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct AuthWallet {
+    pub chain_id: Option<u64>,
+    pub embedded: Option<bool>,
 }
 
 /// Manifest values may point at the environment with an `env:VAR` prefix, so
@@ -116,6 +139,62 @@ impl Manifest {
             Err(_) => manifest_key.map(resolve).transpose()?,
         } {
             vars.push(("LOOP_ETH_TREASURY_KEY", key));
+        }
+
+        Ok(vars)
+    }
+
+    /// The `LOOP_AUTH_*` variables `loop dev` exports for projects with an
+    /// `[auth]` section. Shell-level variables override the manifest.
+    pub fn auth_env(&self) -> Result<Vec<(&'static str, String)>, String> {
+        let Some(auth) = self.auth.as_ref() else {
+            return Ok(Vec::new());
+        };
+
+        let providers = match std::env::var("LOOP_AUTH_PROVIDERS") {
+            Ok(providers) => providers,
+            Err(_) => match &auth.providers {
+                Some(providers) if !providers.is_empty() => providers.join(","),
+                _ => {
+                    return Err(
+                        "[auth] needs providers — e.g. providers = [\"email-password\"] \
+                         in loop.toml"
+                            .to_string(),
+                    );
+                }
+            },
+        };
+        let mut vars = vec![("LOOP_AUTH_PROVIDERS", providers)];
+
+        let mut push = |name: &'static str, value: Option<String>| {
+            if let Some(value) = std::env::var(name).ok().or(value) {
+                vars.push((name, value));
+            }
+        };
+        push("LOOP_AUTH_SESSION_TTL", auth.session_ttl.clone());
+        let otp = auth.otp.as_ref();
+        push("LOOP_AUTH_OTP_FROM", otp.and_then(|o| o.from.clone()));
+        push(
+            "LOOP_AUTH_OTP_DIGITS",
+            otp.and_then(|o| o.digits.map(|d| d.to_string())),
+        );
+        push("LOOP_AUTH_OTP_TTL", otp.and_then(|o| o.ttl.clone()));
+        let wallet = auth.wallet.as_ref();
+        push(
+            "LOOP_AUTH_WALLET_CHAIN_ID",
+            wallet.and_then(|w| w.chain_id.map(|id| id.to_string())),
+        );
+        push(
+            "LOOP_AUTH_WALLET_EMBEDDED",
+            wallet.and_then(|w| w.embedded.map(|e| e.to_string())),
+        );
+
+        // the secret supports env: indirection, so it can stay out of the file
+        if let Some(secret) = match std::env::var("LOOP_AUTH_SECRET") {
+            Ok(secret) => Some(secret),
+            Err(_) => auth.secret.as_deref().map(resolve).transpose()?,
+        } {
+            vars.push(("LOOP_AUTH_SECRET", secret));
         }
 
         Ok(vars)
@@ -267,6 +346,64 @@ mod tests {
         .unwrap();
         let error = parse(dir.path()).unwrap().eth_env().unwrap_err();
         assert!(error.contains("rpc url"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn auth_env_exports_the_configured_values() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("loop.toml"),
+            "name = \"my-api\"\n\n[auth]\nproviders = [\"email-password\", \"email-otp\"]\n\
+             session_ttl = \"7d\"\n\n[auth.otp]\ndigits = 8\nttl = \"5m\"\n\n\
+             [auth.wallet]\nchain_id = 1\nembedded = true\n",
+        )
+        .unwrap();
+        assert_eq!(
+            parse(dir.path()).unwrap().auth_env().unwrap(),
+            vec![
+                ("LOOP_AUTH_PROVIDERS", "email-password,email-otp".to_string()),
+                ("LOOP_AUTH_SESSION_TTL", "7d".to_string()),
+                ("LOOP_AUTH_OTP_DIGITS", "8".to_string()),
+                ("LOOP_AUTH_OTP_TTL", "5m".to_string()),
+                ("LOOP_AUTH_WALLET_CHAIN_ID", "1".to_string()),
+                ("LOOP_AUTH_WALLET_EMBEDDED", "true".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn auth_section_without_providers_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("loop.toml"),
+            "name = \"my-api\"\n\n[auth]\nsession_ttl = \"7d\"\n",
+        )
+        .unwrap();
+        let error = parse(dir.path()).unwrap().auth_env().unwrap_err();
+        assert!(error.contains("providers"), "unexpected error: {error}");
+    }
+
+    #[test]
+    fn auth_secret_resolves_env_indirection() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("loop.toml"),
+            "name = \"my-api\"\n\n[auth]\nproviders = [\"email-otp\"]\n\
+             secret = \"env:LOOP_TEST_AUTH_SECRET_INDIRECT\"\n",
+        )
+        .unwrap();
+        let manifest = parse(dir.path()).unwrap();
+
+        let error = manifest.auth_env().unwrap_err();
+        assert!(error.contains("LOOP_TEST_AUTH_SECRET_INDIRECT"), "{error}");
+
+        unsafe { std::env::set_var("LOOP_TEST_AUTH_SECRET_INDIRECT", "aabb") };
+        assert!(
+            manifest
+                .auth_env()
+                .unwrap()
+                .contains(&("LOOP_AUTH_SECRET", "aabb".to_string()))
+        );
     }
 
     #[test]

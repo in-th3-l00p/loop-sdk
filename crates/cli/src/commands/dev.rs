@@ -25,6 +25,9 @@ fn dev(dir: &str, port: Option<u16>) -> Result<(), String> {
     for (name, value) in manifest.eth_env()? {
         command.env(name, value);
     }
+    for (name, value) in manifest.auth_env()? {
+        command.env(name, value);
+    }
     let status = command
         .status()
         .map_err(|e| format!("failed to run cargo: {e}"))?;

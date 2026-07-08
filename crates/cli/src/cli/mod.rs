@@ -35,6 +35,25 @@ pub enum Commands {
         #[command(subcommand)]
         command: EthCommands,
     },
+    Auth {
+        #[command(subcommand)]
+        command: AuthCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum AuthCommands {
+    /// Secrets for the auth module (embedded wallet encryption)
+    Secret {
+        #[command(subcommand)]
+        command: SecretCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SecretCommands {
+    /// Generate a 32-byte hex secret for [auth]; prints the loop.toml snippet
+    New,
 }
 
 #[derive(Subcommand, Debug)]
