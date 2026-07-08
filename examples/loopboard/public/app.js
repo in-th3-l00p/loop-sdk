@@ -7,7 +7,24 @@ const $ = (id) => document.getElementById(id);
 const state = {
   token: localStorage.getItem("token"),
   profile: null,
+  provider: null,
 };
+
+// find an injected wallet. modern wallets announce themselves over EIP-6963
+// (so several can coexist without fighting over window.ethereum); we collect
+// those and fall back to the legacy window.ethereum for older wallets.
+function walletProvider() {
+  return new Promise((resolve) => {
+    const found = [];
+    const onAnnounce = (event) => found.push(event.detail.provider);
+    window.addEventListener("eip6963:announceProvider", onAnnounce);
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    setTimeout(() => {
+      window.removeEventListener("eip6963:announceProvider", onAnnounce);
+      resolve(found[0] || window.ethereum || null);
+    }, 100);
+  });
+}
 
 // ------------------------------------------------------------------ api
 
@@ -98,19 +115,26 @@ $("verify-code").onclick = async () => {
 
 // sign-in-with-ethereum door (EIP-1193 + EIP-4361 + personal_sign)
 $("connect").onclick = async () => {
-  if (!window.ethereum) {
+  const provider = await walletProvider();
+  if (!provider) {
     toast("no browser wallet found — install metamask", true);
     return;
   }
+  state.provider = provider;
   try {
-    const [account] = await ethereum.request({ method: "eth_requestAccounts" });
+    const accounts = await provider.request({ method: "eth_requestAccounts" });
+    const account = accounts && accounts[0];
+    if (!account) {
+      toast("wallet returned no account — is it unlocked?", true);
+      return;
+    }
     const issued = await api(`/auth/wallet/nonce?address=${account}`);
     const hexMessage =
       "0x" +
       [...new TextEncoder().encode(issued.message)]
         .map((b) => b.toString(16).padStart(2, "0"))
         .join("");
-    const signature = await ethereum.request({
+    const signature = await provider.request({
       method: "personal_sign",
       params: [hexMessage, account],
     });
@@ -121,7 +145,10 @@ $("connect").onclick = async () => {
     });
     await establish(session);
   } catch (e) {
-    toast(e.message, true);
+    // 4001 is the EIP-1193 user-rejected code; anything else is a real fault
+    console.error("wallet connect failed", e);
+    const reason = e?.code === 4001 ? "signature request rejected" : e?.message || String(e);
+    toast(reason, true);
   }
 };
 
@@ -296,9 +323,14 @@ async function tipOnchain(postId) {
       const handle = await api("/tip-onchain", { post_id: postId, amount });
       toast(`sent on-chain: ${handle.hash.slice(0, 14)}…`);
     } else {
+      const provider = state.provider || (await walletProvider());
+      if (!provider) {
+        toast("no browser wallet found — install metamask", true);
+        return;
+      }
       const call = await api(`/tip-calldata?post_id=${postId}&amount=${amount}`);
-      const [account] = await ethereum.request({ method: "eth_requestAccounts" });
-      const hash = await ethereum.request({
+      const [account] = await provider.request({ method: "eth_requestAccounts" });
+      const hash = await provider.request({
         method: "eth_sendTransaction",
         params: [{ from: account, to: call.to, data: call.data }],
       });
