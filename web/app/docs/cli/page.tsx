@@ -31,8 +31,58 @@ export default function Cli() {
             <Code key="c2">--dir</Code>,
             "cargo build --release; prints the binary path target/release/<name>",
           ],
+          [
+            <Code key="d">loop db …</Code>,
+            <span key="d2">
+              <Code>create</Code> <Code>destroy</Code> <Code>migrate</Code>{" "}
+              <Code>reset</Code> <Code>url</Code>
+            </span>,
+            "manages the [database] and applies migrations/ files",
+          ],
+          [
+            <Code key="e">loop migration …</Code>,
+            <span key="e2">
+              <Code>create</Code> <Code>status</Code>
+            </span>,
+            "scaffolds and inspects migration files",
+          ],
+          [
+            <Code key="f">loop eth …</Code>,
+            <span key="f2">
+              <Code>wallet new</Code> <Code>status</Code>
+            </span>,
+            "treasury keypairs and rpc connectivity checks",
+          ],
+          [
+            <Code key="g">loop auth secret new</Code>,
+            "—",
+            "generates the 32-byte secret embedded wallets encrypt under",
+          ],
+          [
+            <Code key="h">loop devnet …</Code>,
+            <span key="h2">
+              <Code>create</Code> <Code>serve</Code> <Code>list</Code>{" "}
+              <Code>delete</Code> <Code>fund</Code>
+            </span>,
+            "named local testnets (anvil) with persisted chain state and funded dev accounts",
+          ],
         ]}
       />
+      <P>
+        <Code>loop devnet create --fork &lt;rpc&gt;</Code> forks a live network so
+        its contracts exist locally; <Code>serve</Code> loads the chain state on
+        start and dumps it on shutdown, so the chain survives restarts;{" "}
+        <Code>fund</Code> sets any address&apos;s ether balance on the running
+        devnet — point apps at it with{" "}
+        <Code>ETH_RPC_URL=http://127.0.0.1:8545</Code>. requires{" "}
+        <a
+          href="https://getfoundry.sh"
+          className="text-brand-soft hover:underline"
+        >
+          foundry
+        </a>
+        &apos;s anvil.
+      </P>
       <P>
         port precedence for <Code>loop dev</Code>: the <Code>--port</Code> flag, then{" "}
         <Code>[dev].port</Code> in the manifest, then 3000.

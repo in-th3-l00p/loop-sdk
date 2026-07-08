@@ -77,7 +77,12 @@ pub(crate) async fn send(
         }
     }
 
-    let raw = signer.sign(&TxRequest(request))?;
+    // signers may block (an embedded wallet reads and decrypts its key), so
+    // signing runs off the async thread like any handler work
+    let request = TxRequest(request);
+    let raw = tokio::task::spawn_blocking(move || signer.sign(&request))
+        .await
+        .map_err(|e| EthError::Tx(format!("signer panicked: {e}")))??;
     let pending = provider
         .send_raw_transaction(&raw)
         .await

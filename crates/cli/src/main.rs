@@ -6,8 +6,8 @@ mod runtime;
 
 use clap::Parser;
 use cli::{
-    Args, AuthCommands, Commands, DbCommands, EthCommands, MigrationCommands, SecretCommands,
-    WalletCommands,
+    Args, AuthCommands, Commands, DbCommands, DevnetCommands, EthCommands, MigrationCommands,
+    SecretCommands, WalletCommands,
 };
 
 fn main() {
@@ -38,6 +38,20 @@ fn main() {
             AuthCommands::Secret { command } => match command {
                 SecretCommands::New => commands::auth::secret_new(),
             },
+        },
+        Commands::Devnet { command } => match command {
+            DevnetCommands::Create {
+                name,
+                chain_id,
+                port,
+                fork,
+            } => commands::devnet::create(name, chain_id, port, fork),
+            DevnetCommands::Serve { name } => commands::devnet::serve(name),
+            DevnetCommands::List => commands::devnet::list(),
+            DevnetCommands::Delete { name, yes } => commands::devnet::delete(&name, yes),
+            DevnetCommands::Fund { address, eth, name } => {
+                commands::devnet::fund(name, &address, eth)
+            }
         },
     }
 }

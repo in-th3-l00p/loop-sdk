@@ -15,7 +15,36 @@ served by the backend itself.
 | eth writes, both rails | `/tip-onchain` signs server-side for embedded wallets; `/tip-calldata` hands linked wallets the calldata to sign in MetaMask |
 | static serving | the `public/` frontend rides the same origin as the api |
 
-## run
+## run on a local devnet (recommended)
+
+A persistent local chain, forked from mainnet so USDC exists, with free gas:
+
+```sh
+loop devnet create board --fork https://ethereum-rpc.publicnode.com
+loop devnet serve board          # keep running; state survives restarts
+```
+
+In a second terminal:
+
+```sh
+export ETH_RPC_URL=http://127.0.0.1:8545
+export LOOP_AUTH_SECRET=$(loop auth secret new | head -1 | cut -d' ' -f2)
+loop db create && loop db migrate
+loop dev
+```
+
+Fund your embedded wallet (the address in the wallet panel) for gas:
+
+```sh
+loop devnet fund 0x<your-wallet> --eth 10 --name board
+```
+
+On-chain tips then confirm instantly, cost nothing real, and persist across
+devnet restarts. (To hold devnet USDC, transfer it from a whale with
+anvil impersonation — see the foundry book — or tip from a wallet that has
+some on the forked network.)
+
+## run against a live network
 
 ```sh
 export ETH_RPC_URL=https://ethereum-rpc.publicnode.com

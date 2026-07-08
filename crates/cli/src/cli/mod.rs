@@ -39,6 +39,45 @@ pub enum Commands {
         #[command(subcommand)]
         command: AuthCommands,
     },
+    Devnet {
+        #[command(subcommand)]
+        command: DevnetCommands,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum DevnetCommands {
+    /// Register a local testnet with persisted chain state
+    Create {
+        /// Devnet name (default: "local")
+        name: Option<String>,
+        #[arg(long, default_value_t = 31337)]
+        chain_id: u64,
+        #[arg(long, default_value_t = 8545)]
+        port: u16,
+        /// Fork a live network so its contracts exist locally
+        #[arg(long)]
+        fork: Option<String>,
+    },
+    /// Run the devnet; chain state loads on start and dumps on shutdown
+    Serve { name: Option<String> },
+    /// List devnets with their status and persisted state size
+    List,
+    /// Permanently delete a devnet and its chain state
+    Delete {
+        name: String,
+        /// Confirm the deletion; required since this is irreversible
+        #[arg(long)]
+        yes: bool,
+    },
+    /// Set an address's ether balance on the running devnet
+    Fund {
+        address: String,
+        #[arg(long, default_value_t = 10)]
+        eth: u64,
+        #[arg(long)]
+        name: Option<String>,
+    },
 }
 
 #[derive(Subcommand, Debug)]
